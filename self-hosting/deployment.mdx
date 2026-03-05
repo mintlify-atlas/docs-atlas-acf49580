@@ -1,0 +1,305 @@
+---
+title: Deployment Options
+description: Advanced deployment configurations and options for Zulip
+---
+
+The default Zulip installation installs a complete Zulip server with all required services on a single machine. This page documents advanced deployment options for production environments.
+
+## Installation methods
+
+### Installing from Git
+
+To install a development version of Zulip from Git, clone the repository:
+
+```bash
+# Install Git if needed
+sudo apt install git
+git clone https://github.com/zulip/zulip.git zulip-server-git
+cd zulip-server-git
+./scripts/setup/install --email=YOUR_EMAIL --hostname=YOUR_HOSTNAME
+```
+
+Common use cases:
+- Upgrading to `main` for features not yet in a release
+- Testing support for a new base OS release
+- Contributing to Zulip development
+
+<Note>
+You can [upgrade from Git](https://zulip.readthedocs.io/en/stable/production/upgrade.html#upgrading-from-a-git-repository) to access pre-release versions and switch between branches.
+</Note>
+
+### Docker deployment
+
+Zulip has an [official Docker image](https://github.com/zulip/docker-zulip).
+
+<Warning>
+We recommend using Docker only if your organization has a strong preference for deploying services using Docker. The standard installer is simpler to maintain and upgrade.
+</Warning>
+
+Zulip's [backup tool](https://zulip.readthedocs.io/en/stable/production/export-and-import.html#backups) supports migrating between Docker and a standard installation.
+
+## Distributed services
+
+Zulip supports running each top-level service on its own machine for scalability and redundancy.
+
+### Supported services
+
+You can configure remote servers for:
+
+- **PostgreSQL** (database)
+- **RabbitMQ** (message queue)
+- **Redis** (caching and presence)
+- **Memcached** (caching)
+- **Smokescreen** (outgoing HTTP proxy)
+
+Configure remote services in `/etc/zulip/settings.py`—search for the service name to find inline documentation.
+
+### Installing standalone services
+
+All Puppet modules under `zulip::profile` can be configured standalone. For example, to install a Zulip Redis server:
+
+```bash
+./scripts/setup/install --puppet-classes zulip::profile::redis
+```
+
+See the [standalone.pp manifest](https://github.com/zulip/zulip/blob/main/puppet/zulip/manifests/profile/standalone.pp) for available profiles.
+
+### Remote PostgreSQL
+
+For production deployments with hundreds of users, we recommend a [remote PostgreSQL database](https://zulip.readthedocs.io/en/stable/production/postgresql.html). This supports:
+
+- Cloud provider managed PostgreSQL (e.g., AWS RDS)
+- Warm-standby replicas for reliability
+- Dedicated database hardware
+
+## Network configuration
+
+### Using an alternate port
+
+To use a port other than 443 for HTTPS:
+
+<Steps>
+  <Step title="Update EXTERNAL_HOST">
+    Edit `/etc/zulip/settings.py`:
+
+    ```python
+    EXTERNAL_HOST = 'zulip.example.com:12345'
+    ```
+
+    Restart the server:
+    ```bash
+    /home/zulip/deployments/current/scripts/restart-server
+    ```
+  </Step>
+
+  <Step title="Configure nginx port">
+    Add to `/etc/zulip/zulip.conf`:
+
+    ```ini
+    [application_server]
+    nginx_listen_port = 12345
+    ```
+  </Step>
+
+  <Step title="Apply configuration">
+    Run Puppet to update nginx:
+
+    ```bash
+    /home/zulip/deployments/current/scripts/zulip-puppet-apply
+    ```
+  </Step>
+</Steps>
+
+### Reverse proxy deployment
+
+Zulip supports running behind a reverse proxy. See the [reverse proxies documentation](https://zulip.readthedocs.io/en/stable/production/reverse-proxies.html) for configuration details.
+
+### Outgoing HTTP proxy
+
+Zulip routes all outgoing HTTP/HTTPS traffic through [Smokescreen](https://github.com/stripe/smokescreen) to protect against SSRF attacks.
+
+#### Allowing private IP addresses
+
+By default, Smokescreen denies access to all non-public IP addresses. To allow access to internal hosts:
+
+1. Edit `/etc/zulip/zulip.conf`:
+
+   ```ini
+   [http_proxy]
+   allow_addresses = 10.17.17.17
+   ```
+
+2. Apply changes:
+
+   ```bash
+   /home/zulip/deployments/current/scripts/zulip-puppet-apply
+   ```
+
+#### Using a custom proxy
+
+To use your own outgoing proxy:
+
+1. Edit `/etc/zulip/zulip.conf`:
+
+   ```ini
+   [http_proxy]
+   host = 127.0.0.1
+   port = 4750
+   ```
+
+2. Apply changes:
+
+   ```bash
+   /home/zulip/deployments/current/scripts/zulip-puppet-apply
+   ```
+
+<Warning>
+To disable the outgoing proxy entirely, set an empty `host` value. This is **not recommended** as it allows attackers to leverage the Zulip server to access internal resources.
+</Warning>
+
+## Deployment hooks
+
+Zulip's upgrade process supports custom hooks for automation and notifications.
+
+### Hook locations
+
+- `/etc/zulip/pre-deploy.d/*.hook` - Runs before server restart
+- `/etc/zulip/post-deploy.d/*.hook` - Runs after server restart
+
+### Environment variables
+
+Hooks receive:
+
+- `ZULIP_OLD_VERSION` - Version being upgraded from
+- `ZULIP_NEW_VERSION` - Version being upgraded to
+- `ZULIP_OLD_COMMIT` - Old commit hash (Git upgrades only)
+- `ZULIP_NEW_COMMIT` - New commit hash (Git upgrades only)
+- `ZULIP_OLD_MERGE_BASE_COMMIT` - Old merge base (Git upgrades only)
+- `ZULIP_NEW_MERGE_BASE_COMMIT` - New merge base (Git upgrades only)
+
+<Warning>
+Hooks that exit with non-zero status will abort the upgrade.
+</Warning>
+
+### Zulip message deploy hook
+
+Send messages to a Zulip channel before and after upgrades:
+
+<Steps>
+  <Step title="Add Puppet class">
+    Edit `/etc/zulip/zulip.conf` and add to `puppet_classes`:
+
+    ```ini
+    puppet_classes = zulip::profile::standalone, zulip::hooks::zulip_notify
+    ```
+  </Step>
+
+  <Step title="Configure notification settings">
+    Add to `/etc/zulip/zulip.conf`:
+
+    ```ini
+    [zulip_notify]
+    bot_email = your-bot@zulip.example.com
+    server = zulip.example.com
+    stream = deployments
+    ```
+  </Step>
+
+  <Step title="Add bot API key">
+    Add to `/etc/zulip/zulip-secrets.conf`:
+
+    ```ini
+    zulip_release_api_key = abcd1234E6DK0F7pNSqaMSuzd8C5i7Eu
+    ```
+  </Step>
+
+  <Step title="Apply configuration">
+    ```bash
+    /home/zulip/deployments/current/scripts/zulip-puppet-apply
+    ```
+  </Step>
+</Steps>
+
+### Sentry deploy hook
+
+Create [Sentry releases](https://docs.sentry.io/product/releases/) for error tracking:
+
+<Steps>
+  <Step title="Enable Sentry error logging">
+    Configure [Sentry error logging](https://zulip.readthedocs.io/en/stable/subsystems/logging.html#sentry-error-logging) first.
+  </Step>
+
+  <Step title="Create internal integration">
+    Create a [Sentry internal integration](https://docs.sentry.io/product/integrations/integration-platform/internal-integration/) named "Release annotator" with Admin permissions on Release.
+  </Step>
+
+  <Step title="Configure Zulip">
+    Add to `/etc/zulip/zulip.conf`:
+
+    ```ini
+    puppet_classes = zulip::profile::standalone, zulip::hooks::sentry
+
+    [sentry]
+    organization = your-organization-name
+    project = your-project-name
+    ```
+
+    Add to `/etc/zulip/zulip-secrets.conf`:
+
+    ```ini
+    sentry_release_auth_token = 6c12f890c1c864666e64ee9c959c4552b3de473a076815e7669f53793fa16afc
+    ```
+  </Step>
+
+  <Step title="Apply configuration">
+    ```bash
+    /home/zulip/deployments/current/scripts/zulip-puppet-apply
+    ```
+  </Step>
+</Steps>
+
+For Git deployments, also add the [GitHub integration](https://docs.sentry.io/product/integrations/source-code-mgmt/github/) and grant the internal integration Read & Write on Organization.
+
+## Advanced installer options
+
+The installer supports additional options beyond those in the [installation guide](/self-hosting/installation):
+
+### PostgreSQL options
+
+```bash
+# Set PostgreSQL version (14, 15, 16, 17, or 18)
+--postgresql-version=16
+
+# Customize database name (first install only)
+--postgresql-database-name=customdb
+
+# Customize database user (first install only)
+--postgresql-database-user=customuser
+
+# Skip database initialization
+--no-init-db
+```
+
+### Configuration preservation
+
+```bash
+# Preserve existing /etc/zulip configuration files
+--no-overwrite-settings
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Upgrade Guide" icon="arrow-up" href="/self-hosting/upgrade">
+    Learn how to upgrade your Zulip server
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/self-hosting/monitoring">
+    Set up monitoring for your deployment
+  </Card>
+  <Card title="Multiple Organizations" icon="building" href="/self-hosting/multiple-organizations">
+    Host multiple organizations on one server
+  </Card>
+  <Card title="Backup & Restore" icon="database" href="/self-hosting/backup-restore">
+    Configure backup strategies
+  </Card>
+</CardGroup>

@@ -1,0 +1,153 @@
+---
+title: Contributing to Zulip
+description: Step-by-step guide to becoming a successful Zulip contributor
+---
+
+Welcome to the Zulip contributor guide! This page will help you get started contributing code to the [Zulip](https://zulip.com/) organized team chat open-source project. Thousands of people use Zulip every day, and your work will have a meaningful impact on their experience.
+
+## How to Be a Successful Contributor
+
+To become an effective Zulip contributor, you should be excited to:
+
+### Learn from Documentation
+
+Zulip has over 185,000 words of documentation for contributors. We expect you to make good use of it and read our guides carefully.
+
+### Aim for Understanding
+
+To produce work that improves Zulip, you'll need to understand the relevant existing code and figure out a good set of changes. Fiddling until things seem to work, then asking maintainers to verify code you don't understand yourself, does not help the project.
+
+### Take Pride in Your Work
+
+Strive to write the best commits you can, carefully review your own work, and take the time to explain it clearly to project maintainers. Do your very best to overcome any challenges before asking for help.
+
+### Learn from Feedback
+
+Every pull request undergoes rigorous review. We need contributors to carefully apply and respond to feedback, and take advantage of the learning experience to avoid similar mistakes in future work.
+
+### Communicate with Intention
+
+Any communication from you is a request for time and attention from Zulip's maintainers. Put in the reasoning and writing effort required to communicate clearly and succinctly.
+
+### Communicate in the Open
+
+Technical and product decisions are discussed openly in the [Zulip development community](https://zulip.com/development-community/) and on GitHub, so we can all learn from each other.
+
+## AI Use Policy
+
+You can use any tools that help you understand the Zulip codebase and write good code, including AI tools. However, you always need to understand and explain the changes you're proposing.
+
+<Warning>
+**Do not submit an AI-generated PR you haven't personally understood and tested.** PRs that appear to violate this guideline will be closed without review.
+</Warning>
+
+### Using AI as a Coding Assistant
+
+- Don't skip becoming familiar with the part of the codebase you're working on
+- Split your changes into coherent commits, even if an LLM generates them all in one go
+- Don't simply ask an LLM to add code comments - be specific and demand succinctness
+
+### Using AI for Communication
+
+**Do not post AI-generated messages** in the Zulip development community. We want to read your own genuine expression of your thoughts.
+
+When you use an LLM to write a PR description or comment:
+
+- Don't include anything that's obvious from looking at your changes directly
+- Explain your reasoning, not just what the code does
+- Verify that everything you write is accurate
+- Complete all parts of the PR description template
+- Ensure clarity and succinctness - don't let LLMs make your writing longer
+
+## Getting Started
+
+### Learning Git
+
+Zulip uses GitHub for source control and code review. Becoming familiar with Git is essential. Our [Git guide](/development/git-guide) will help you get started.
+
+### Setting Up Your Environment
+
+To contribute code to Zulip:
+
+1. [Install the development environment](/development/setup/installation)
+2. Familiarize yourself with [using the development environment](/development/setup/using)
+3. Go through the [new application feature tutorial](/development/tutorials/new-feature) to understand how the codebase is organized
+
+## Finding an Issue to Work On
+
+<Note>
+Project maintainers are not able to individually recommend issues to new contributors. Learning how to find an issue you can tackle is one of the skills you need to learn.
+</Note>
+
+### Where to Look
+
+Check out issues tagged with the "help wanted" label:
+
+- [Server and web app](https://github.com/zulip/zulip/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
+- [Mobile app](https://github.com/zulip/zulip-flutter/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
+- [Desktop app](https://github.com/zulip/zulip-desktop/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
+- [Terminal app](https://github.com/zulip/zulip-terminal/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
+
+### Picking an Issue
+
+Start small! Many first contributions have fewer than 10 lines of changes (not counting tests).
+
+<Steps>
+  <Step title="Find a promising issue">
+    Look for issues tagged "help wanted" that are either unassigned or appear abandoned.
+  </Step>
+  
+  <Step title="Understand the issue">
+    Read the description carefully and explore the product to understand how it fits into the bigger picture.
+  </Step>
+  
+  <Step title="Explore the code">
+    Try to find the part of the code you'll need to modify using `git grep` and get some idea of your approach.
+  </Step>
+  
+  <Step title="Claim the issue">
+    Once you're confident you can tackle it effectively, post a comment to claim the issue.
+  </Step>
+</Steps>
+
+### Claiming an Issue
+
+In the main server/web app repository, post a comment with `@zulipbot claim` to have the issue assigned to you.
+
+<Note>
+New contributors can only claim one issue until their first pull request is merged.
+</Note>
+
+## Getting Help
+
+Join the [Zulip development community](https://zulip.com/development-community/) to ask questions:
+
+1. Review the [community guidelines](https://zulip.com/development-community/#community-norms)
+2. Decide where to post your question
+3. Write up your question following our [guide on asking great questions](/development/asking-questions)
+4. Review your message before sending
+
+Well-posed questions generally get a response within 1-2 business days.
+
+## Best Practices
+
+As you work on your contribution:
+
+- **Ask great questions** - Explain your current understanding, what you've tried, and where you got stuck
+- **Practice Git commit discipline** - Write clear, atomic commits with good messages
+- **Submit carefully tested code** - Review your own work thoroughly before submitting
+- **Make PRs easy to review** - Follow our guidelines for reviewable pull requests
+- **Be responsive to feedback** - Address all suggestions and comments promptly
+- **Be helpful and friendly** - Contribute positively to the community
+
+## Submitting a Pull Request
+
+See our [guide on submitting pull requests](/development/pull-requests) for detailed instructions on presenting your changes.
+
+It's OK if your first issue takes a while - that's normal! You'll work much faster as you build experience.
+
+## Beyond the First Issue
+
+For your second issue, we recommend looking through issues with the same `area:` label as your first. You'll reuse the knowledge you gained about that part of the codebase.
+
+The path to becoming a core developer often involves taking ownership of one of these area labels.

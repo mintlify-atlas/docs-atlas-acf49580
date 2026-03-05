@@ -1,0 +1,477 @@
+---
+title: Topic-based Threading
+description: Understand how Zulip's unique topic-based threading model transforms team communication
+---
+
+Zulip's **topic-based threading** is what makes it fundamentally different from other chat apps. It's the feature that users consistently cite as their favorite thing about Zulip, and once you experience it, other chat apps feel chaotic by comparison.
+
+## What is Topic-based Threading?
+
+In Zulip, every message belongs to a **channel** (like #engineering or #marketing) and has a **topic** (like "Bug #1234" or "Q1 Planning"). This creates a dual-layer organization:
+
+<div className="bg-gradient-to-r from-[#5c9cfc]/10 to-[#747bfc]/10 rounded-lg p-6 my-4 border-l-4 border-[#5c9cfc]">
+  <div className="font-mono text-sm">
+    <strong>Channel:</strong> #engineering<br/>
+    └─ <strong>Topic:</strong> "Database migration"<br/>
+    &nbsp;&nbsp;&nbsp;├─ Message 1: "We should migrate to PostgreSQL 15"<br/>
+    &nbsp;&nbsp;&nbsp;├─ Message 2: "Agreed, the performance improvements are significant"<br/>
+    &nbsp;&nbsp;&nbsp;└─ Message 3: "I can start on this next week"<br/>
+    └─ <strong>Topic:</strong> "Bug #1234 - Login fails"<br/>
+    &nbsp;&nbsp;&nbsp;├─ Message 1: "Users reporting login failures on mobile"<br/>
+    &nbsp;&nbsp;&nbsp;└─ Message 2: "I found the issue, pushing a fix now"<br/>
+  </div>
+</div>
+
+Multiple conversations can happen simultaneously in the same channel, each in its own topic. You can participate in one conversation without being overwhelmed by others.
+
+## Why Topics Matter
+
+### 1. No More Context Switching
+
+**The Problem with Traditional Chat:**
+
+In most chat apps, all messages in a channel appear in one continuous feed:
+
+```
+#engineering
+Alice: We should migrate to PostgreSQL 15
+Bob: Anyone seen my laptop charger?
+Carol: The performance improvements are significant
+Dave: Meeting in 5 minutes everyone!
+Alice: I can start on this next week
+Eve: @Bob check the conference room
+```
+
+This interleaving makes it hard to follow any single conversation. You have to mentally untangle multiple discussions happening at once.
+
+**The Zulip Solution:**
+
+With topics, each conversation is separate:
+
+```
+#engineering > Database migration
+Alice: We should migrate to PostgreSQL 15
+Carol: The performance improvements are significant
+Alice: I can start on this next week
+
+#engineering > Lost items
+Bob: Anyone seen my laptop charger?
+Eve: @Bob check the conference room
+
+#engineering > Standup
+Dave: Meeting in 5 minutes everyone!
+```
+
+You can read one conversation at a time, in order, with full context.
+
+<Tip>
+  **Result**: Your brain doesn't have to work as hard to follow conversations. Communication becomes more efficient and less exhausting.
+</Tip>
+
+### 2. Asynchronous Communication That Works
+
+Topics enable truly effective asynchronous communication across time zones.
+
+<AccordionGroup>
+  <Accordion title="Catching up is effortless">
+    When you return after being away, you see a list of topics with unread messages:
+    
+    - **Bug #1234** (5 messages)
+    - **Q1 Planning** (12 messages)
+    - **New hire onboarding** (3 messages)
+    
+    You can:
+    - Read the conversations that matter to you
+    - Skim or skip the ones that don't
+    - Mark entire topics as read with one click
+    - Come back to important discussions later
+    
+    Compare this to traditional chat where you have to scroll through hundreds of interleaved messages!
+  </Accordion>
+  
+  <Accordion title="Conversations can last days">
+    A topic can span hours or days without getting lost:
+    
+    **Monday 9am**: "Should we refactor the auth system?"
+    
+    **Monday 2pm**: "I think we should, here's why..."
+    
+    **Tuesday 8am**: "I found this article about it..."
+    
+    **Wednesday 10am**: "Let's schedule a meeting to decide"
+    
+    Each reply appears in context, even if sent days later. No one has to say "going back to what Alice said on Monday..." because the conversation structure does that automatically.
+  </Accordion>
+  
+  <Accordion title="Reply on your own schedule">
+    You can read a conversation now and reply later:
+    
+    1. See an interesting discussion in the morning
+    2. Think about it during the day
+    3. Reply in the afternoon when you have time
+    4. Your reply appears in the right context, not buried 500 messages later
+    
+    This removes the pressure to respond immediately while still keeping conversations organized.
+  </Accordion>
+</AccordionGroup>
+
+### 3. Multiple Conversations, No Chaos
+
+In a busy channel, Zulip's topics prevent chaos.
+
+**Without topics (traditional chat):**
+- One channel = one conversation at a time
+- People wait for conversations to end before starting new ones
+- Or multiple conversations interleave, creating confusion
+- Busy channels become unusable
+
+**With topics (Zulip):**
+- Dozens of conversations can happen simultaneously
+- Each is separate and easy to follow
+- No need to wait or worry about interrupting
+- Channels scale to any level of activity
+
+<Info>
+  In the Zulip development community, the #zulip channel regularly has 20+ active topics. This would be impossible to manage in traditional chat.
+</Info>
+
+### 4. Better Than Threads
+
+Many chat apps have added "threads" to try to solve organization problems. But Zulip's topics work better:
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
+  <div className="border rounded-lg p-4">
+    <h4 className="font-semibold mb-2 text-red-600">Traditional Threads</h4>
+    <ul className="text-sm space-y-1">
+      <li>❌ Hidden in sidebars</li>
+      <li>❌ Hard to discover</li>
+      <li>❌ Can't see multiple threads at once</li>
+      <li>❌ Cramped interface</li>
+      <li>❌ Awkward to navigate</li>
+      <li>❌ Not searchable as easily</li>
+    </ul>
+  </div>
+  
+  <div className="border rounded-lg p-4 border-[#5c9cfc]">
+    <h4 className="font-semibold mb-2 text-[#5c9cfc]">Zulip Topics</h4>
+    <ul className="text-sm space-y-1">
+      <li>✅ Front and center in the main view</li>
+      <li>✅ Easy to browse and discover</li>
+      <li>✅ List view shows all topics</li>
+      <li>✅ Full screen space for reading</li>
+      <li>✅ Smooth keyboard navigation</li>
+      <li>✅ Powerful search by topic</li>
+    </ul>
+  </div>
+</div>
+
+Topics are first-class citizens in Zulip, not an afterthought. The entire UI is designed around them.
+
+## How Topics Work in Practice
+
+### Naming Topics
+
+Good topic names are specific and descriptive:
+
+<CardGroup cols={2}>
+  <Card title="Good Topic Names" icon="check">
+    - "Bug #1234 - Login fails on mobile"
+    - "Q1 2024 budget planning"
+    - "Redesign: Homepage feedback"
+    - "Hiring: Backend engineer position"
+    - "Party planning for next Friday"
+  </Card>
+  
+  <Card title="Poor Topic Names" icon="xmark">
+    - "Question" (too vague)
+    - "Hi" (not descriptive)
+    - "Meeting" (which meeting?)
+    - "FYI" (what about?)
+    - "Thoughts?" (on what?)
+  </Card>
+</CardGroup>
+
+<Tip>
+  **Think of topics like email subject lines** - they should describe the conversation so someone can decide if it's relevant to them.
+</Tip>
+
+### Starting a New Topic
+
+Start a new topic when:
+
+- ✅ You're beginning a new conversation
+- ✅ Changing the subject in a channel
+- ✅ The current topic has run its course
+- ✅ You want to discuss something that deserves its own space
+
+Don't worry about creating too many topics! It's better to have many specific topics than to jam everything into one.
+
+### Replying to Topics
+
+When you reply:
+
+1. Click or select any message in the topic
+2. Press `R` (or click Reply)
+3. The compose box fills in the channel and topic automatically
+4. Your message appears in the right place
+
+<Warning>
+  If you want to start a **new** conversation, press `C` for a new topic instead of `R` to reply. This is important!
+</Warning>
+
+## Real-world Benefits
+
+### For Individuals
+
+<Steps>
+  <Step title="Stay organized">
+    Your inbox shows conversations, not individual messages. See what discussions need your attention at a glance.
+  </Step>
+  
+  <Step title="Catch up efficiently">
+    Read what matters, skip what doesn't. No more scrolling through hundreds of messages.
+  </Step>
+  
+  <Step title="Participate asynchronously">
+    Reply when convenient. Your response will be in the right context.
+  </Step>
+  
+  <Step title="Find information later">
+    Search by topic to find past discussions: `stream:engineering topic:"database migration"`
+  </Step>
+</Steps>
+
+### For Teams
+
+<CardGroup cols={2}>
+  <Card title="Remote Work" icon="laptop">
+    Teams across time zones can collaborate effectively. Topics let people participate on their own schedule while maintaining context.
+  </Card>
+  
+  <Card title="Large Teams" icon="users">
+    Scale to hundreds or thousands of users. Topics prevent information overload by organizing conversations.
+  </Card>
+  
+  <Card title="Open Source" icon="code-branch">
+    New contributors can browse topics to find conversations they're interested in and participate meaningfully.
+  </Card>
+  
+  <Card title="Knowledge Sharing" icon="book">
+    Topics create a searchable archive of decisions and discussions. Institutional knowledge isn't lost in a chat scroll.
+  </Card>
+</CardGroup>
+
+## Comparison: A Day in the Life
+
+Let's see how the same scenario plays out in traditional chat vs. Zulip.
+
+### Traditional Chat (9am - 5pm)
+
+<Accordion title="View the chaos">
+  ```
+  #team-channel
+  
+  9:00 AM - Alice: Good morning! Can we discuss the Q1 roadmap?
+  9:02 AM - Bob: Morning! Sure, what are you thinking?
+  9:05 AM - Carol: Hey, anyone know where the design files are?
+  9:07 AM - Alice: I think we should prioritize the mobile app
+  9:10 AM - Dave: @Carol check Google Drive
+  9:15 AM - Eve: We're out of coffee
+  9:18 AM - Bob: @Alice I agree on mobile, but what about the API?
+  9:20 AM - Frank: Can someone review my PR?
+  9:25 AM - Carol: Thanks @Dave, found them!
+  9:30 AM - Alice: @Bob good point about the API...
+  
+  [300 more messages throughout the day mixing 20+ different conversations]
+  
+  3:30 PM - Grace: (Just got online) Wait, what was decided about Q1?
+  3:32 PM - Grace: (Scrolling through 400 messages trying to find the roadmap discussion)
+  ```
+</Accordion>
+
+Grace has to:
+1. Scroll through hundreds of messages
+2. Mentally filter out unrelated conversations  
+3. Piece together the roadmap discussion from interleaved messages
+4. Might miss important context
+
+### Zulip (Same Day)
+
+<Accordion title="View the organization">
+  ```
+  #team > Q1 Roadmap
+  9:00 AM - Alice: Good morning! Can we discuss the Q1 roadmap?
+  9:02 AM - Bob: Morning! Sure, what are you thinking?
+  9:07 AM - Alice: I think we should prioritize the mobile app
+  9:18 AM - Bob: I agree on mobile, but what about the API?
+  9:30 AM - Alice: Good point about the API...
+  [Conversation continues in this topic]
+  
+  #team > Design files location
+  9:05 AM - Carol: Hey, anyone know where the design files are?
+  9:10 AM - Dave: Check Google Drive, folder "Q1 Designs"
+  9:25 AM - Carol: Thanks, found them!
+  
+  #team > Coffee situation
+  9:15 AM - Eve: We're out of coffee
+  9:20 AM - Frank: I'll grab some on my lunch break
+  
+  #team > PR review request
+  9:20 AM - Frank: Can someone review my PR for the auth fix?
+  [PR discussion continues here]
+  
+  ---
+  
+  3:30 PM - Grace: (Just got online)
+  [Sees in inbox: "Q1 Roadmap" has 15 messages]
+  [Clicks topic and reads the entire conversation in sequence]
+  3:32 PM - Grace: Based on the discussion, I think we should...
+  ```
+</Accordion>
+
+Grace can:
+1. See "Q1 Roadmap" in her inbox
+2. Click to read just that conversation
+3. Read all messages in order with full context
+4. Reply with confidence that she has the full picture
+
+<Info>
+  **Time saved**: What took 15+ minutes of scrolling and mental effort in traditional chat takes 30 seconds in Zulip.
+</Info>
+
+## Technical Advantages
+
+### Powerful Search
+
+Topics make search incredibly powerful:
+
+```
+# Find all messages in a specific conversation
+stream:engineering topic:"database migration"
+
+# Find topics about a subject
+stream:design topic:"homepage"
+
+# Find your messages in a topic
+stream:team topic:Q1 sender:me
+
+# Find all topics from last week
+stream:general newer:7d
+```
+
+### Clean URLs
+
+Every topic has a shareable URL:
+
+```
+https://your-org.zulipchat.com/#narrow/stream/123-engineering/topic/Bug.20.231234
+```
+
+Share links to specific conversations:
+- In documentation
+- In issue trackers
+- In emails
+- In other chat messages
+
+People click the link and see the exact conversation in context.
+
+### Topic Management
+
+Moderate conversations effectively:
+
+- **Rename topics** to fix typos or improve clarity
+- **Move messages** between topics to reorganize
+- **Resolve topics** to mark discussions as complete
+- **Mute topics** that aren't relevant to you
+- **Follow topics** to get notifications for all messages
+
+## Learning Topics
+
+Topics feel natural quickly, usually within a day or two:
+
+<Steps>
+  <Step title="Day 1: Feels different">
+    You're used to traditional chat. Topics feel like extra structure. That's normal!
+  </Step>
+  
+  <Step title="Day 2-3: Start seeing benefits">
+    You notice it's easier to catch up on messages. Conversations make more sense.
+  </Step>
+  
+  <Step title="Week 1: Comfortable">
+    Creating topics and replying feels natural. You appreciate the organization.
+  </Step>
+  
+  <Step title="Week 2+: Can't imagine going back">
+    You try to use another chat app and find it frustrating. Where did that conversation go? Why is everything mixed together?
+  </Step>
+</Steps>
+
+<Tip>
+  **Pro tip**: Once you master topics, check out [keyboard shortcuts](/features#keyboard-shortcuts) to navigate even faster. `S` to narrow to a topic, `N`/`P` for next/previous message, and more.
+</Tip>
+
+## Frequently Asked Questions
+
+<AccordionGroup>
+  <Accordion title="Do I need to think of a topic for every message?">
+    Yes, but it's easier than it sounds! Think of it like email subject lines. After a few messages, it becomes automatic. And when replying, the topic is filled in automatically.
+  </Accordion>
+  
+  <Accordion title="What if I can't think of a good topic name?">
+    Start with something simple and descriptive. You (or someone else) can rename it later if needed. It's better to have an okay topic name than to skip topics entirely.
+  </Accordion>
+  
+  <Accordion title="Can I have too many topics?">
+    Not really! More specific topics are better than cramming everything into one. Old topics naturally fall off the list as new ones are created.
+  </Accordion>
+  
+  <Accordion title="How are topics different from threads?">
+    Threads are usually hidden in sidebars and are hard to browse. Topics are front and center in Zulip. You can see a list of all topics in a channel, navigate with keyboard shortcuts, and search by topic easily.
+  </Accordion>
+  
+  <Accordion title="Do topics work for direct messages?">
+    Yes! Group DMs can have topics too, though they're optional for one-on-one DMs.
+  </Accordion>
+</AccordionGroup>
+
+## See It In Action
+
+The best way to understand topics is to experience them:
+
+<CardGroup cols={2}>
+  <Card title="Try Zulip" icon="rocket" href="https://chat.zulip.org">
+    Visit the Zulip development community (no account needed) and browse some busy channels to see topics in action.
+  </Card>
+  
+  <Card title="Start Your Organization" icon="plus" href="https://zulip.com/new/">
+    Create a free Zulip Cloud organization and experience organized team chat.
+  </Card>
+  
+  <Card title="Quick Start Guide" icon="book" href="/quickstart">
+    Learn how to use Zulip effectively with our step-by-step quick start guide.
+  </Card>
+  
+  <Card title="Compare Chat Apps" icon="balance-scale" href="/why-zulip/comparison">
+    See detailed comparisons with Slack, Teams, Discord, and other platforms.
+  </Card>
+</CardGroup>
+
+## The Bottom Line
+
+<div className="bg-gradient-to-r from-[#5c9cfc] to-[#747bfc] rounded-xl p-8 my-6 text-white">
+  <h3 className="text-2xl font-bold mb-4">Why Topic-based Threading Matters</h3>
+  
+  <div className="space-y-3">
+    <div>✅ <strong>Read faster:</strong> See conversations organized by topic, not mixed together</div>
+    <div>✅ <strong>Catch up easier:</strong> Review topics that matter, skip ones that don't</div>
+    <div>✅ <strong>Participate asynchronously:</strong> Reply hours or days later with full context</div>
+    <div>✅ <strong>Scale to any size:</strong> Hundreds of users and topics in one channel</div>
+    <div>✅ <strong>Find information:</strong> Search by topic to locate past discussions</div>
+    <div>✅ <strong>Reduce stress:</strong> No pressure to read everything immediately</div>
+  </div>
+  
+  <p className="mt-6 text-lg">
+    Topic-based threading isn't just a feature—it's a fundamentally better way to organize team communication.
+  </p>
+</div>

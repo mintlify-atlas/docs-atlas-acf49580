@@ -1,0 +1,565 @@
+---
+title: Frontend Testing
+description: Writing and running Node.js unit tests for Zulip's JavaScript/TypeScript code
+---
+
+Zulip's frontend unit tests use Node.js with a custom test harness. These tests are fast (>100x faster than browser tests) and preferred for testing JavaScript/TypeScript logic.
+
+## Why Node Tests?
+
+Node-based unit tests are preferred over [Puppeteer end-to-end tests](/development/testing/end-to-end) because they are:
+
+- **Much faster** - Run in milliseconds instead of seconds
+- **Easier to write** - Simpler setup and debugging
+- **More reliable** - No timing issues or flaky failures
+- **Better isolation** - Test individual modules
+
+## Running Tests
+
+### Basic Usage
+
+```bash
+# Run all frontend tests
+./tools/test-js-with-node
+
+# Run specific test file
+./tools/test-js-with-node message_list
+
+# Run multiple specific tests
+./tools/test-js-with-node message_list stream_data
+
+# See options
+./tools/test-js-with-node --help
+```
+
+### Coverage Reports
+
+```bash
+# Generate coverage report
+./tools/test-js-with-node --coverage
+
+# Opens browser with interactive report
+# Shows which lines were executed
+# Click files to see line-by-line coverage
+```
+
+<Note>
+Goal: 100% coverage on all data/logic modules. UI modules are lower priority for unit testing.
+</Note>
+
+## Test File Structure
+
+### Location
+
+**Tests**: `web/tests/*.test.cjs`
+
+**Source code**: `web/src/*.ts` or `web/src/*.js`
+
+Test files mirror source structure:
+
+- `web/src/message_list.ts` → `web/tests/message_list.test.cjs`
+- `web/src/stream_data.ts` → `web/tests/stream_data.test.cjs`
+
+### Example Test
+
+From `web/tests/stream_data.test.cjs`:
+
+```javascript
+const {strict: assert} = require("assert");
+
+const {zrequire} = require("./lib/namespace.cjs");
+const {run_test} = require("./lib/test.cjs");
+
+const stream_data = zrequire("stream_data");
+const sub_store = zrequire("sub_store");
+
+run_test("get_by_id", () => {
+    stream_data.clear_subscriptions();
+    
+    const denmark = {
+        name: "Denmark",
+        subscribed: true,
+        color: "blue",
+        stream_id: 42,
+    };
+    
+    stream_data.add_sub_for_tests("Denmark", denmark);
+    
+    const sub = stream_data.get_sub("Denmark");
+    assert.equal(sub.color, "blue");
+    
+    const sub_by_id = sub_store.get(42);
+    assert.equal(sub_by_id.color, "blue");
+});
+```
+
+## How Node Tests Work
+
+Unlike Puppeteer tests, node tests:
+
+- ❌ No browser
+- ❌ No server
+- ❌ No full DOM (usually)
+
+Instead:
+
+- ✓ Mock DOM operations with `zjquery`
+- ✓ Run pure JavaScript logic
+- ✓ Execute in milliseconds
+
+### zjquery - Mock jQuery
+
+Zulip uses a custom library **zjquery** to mock jQuery:
+
+```javascript
+const {$t} = require("./lib/zjquery.cjs");
+
+run_test("click_handler", () => {
+    const $button = $("#my-button");
+    
+    // Set up what find() should return
+    const $child = $("#child");
+    $button.set_find_results(".child", $child);
+    
+    // Now this works:
+    const result = $button.find(".child");
+    assert.equal(result, $child);
+});
+```
+
+Key zjquery features:
+
+- Minimal jQuery implementation
+- Set return values for complex functions
+- Verify functions were called
+- Much faster than real DOM
+
+Read `web/tests/zjquery.test.cjs` for complete documentation.
+
+### Stubbing Functions
+
+If a test calls a function zjquery doesn't implement:
+
+```javascript
+// Error: You must create a stub for $("#foo").bar
+
+// Solution: Add stub in your test
+run_test("test_name", () => {
+    const $elem = $("#foo");
+    $elem.bar = () => "stubbed value";
+    
+    // Now calls work
+    myFunction();  // Calls $("#foo").bar() internally
+});
+```
+
+## Managing Dependencies
+
+### Loading Real Code
+
+Use `zrequire` to load actual implementation:
+
+```javascript
+const {zrequire} = require("./lib/namespace.cjs");
+
+// Load module from web/src/
+const util = zrequire("util");
+const stream_data = zrequire("stream_data");
+
+// Load with different name
+const Filter = zrequire("Filter", "js/filter");
+```
+
+### Mocking Modules
+
+Use `mock_esm` to replace module with stub:
+
+```javascript
+const {mock_esm} = require("./lib/test.cjs");
+
+// Create mock with some stubbed functions
+const reminder = mock_esm("../../web/src/reminder", {
+    is_deferred_delivery: () => false,
+});
+
+run_test("test_name", () => {
+    // Override behavior for this test
+    reminder.is_deferred_delivery = () => true;
+    
+    // Test code that calls reminder.is_deferred_delivery()
+});
+```
+
+### Hybrid Approach
+
+Load real code but override specific functions:
+
+```javascript
+// Load real implementation
+zrequire("narrow_state");
+
+run_test("test_name", () => {
+    // Override just one function
+    narrow_state.stream = function () {
+        return "office";
+    };
+    
+    // Rest of narrow_state works normally
+});
+```
+
+## Writing Tests
+
+### Test Structure
+
+```javascript
+const {strict: assert} = require("assert");
+const {zrequire} = require("./lib/namespace.cjs");
+const {run_test} = require("./lib/test.cjs");
+
+// Load dependencies
+const util = zrequire("util");
+
+run_test("test_name", () => {
+    // Setup
+    const input = {foo: "bar"};
+    
+    // Execute
+    const result = util.function_name(input);
+    
+    // Verify
+    assert.equal(result.foo, "bar");
+    assert.ok(result.processed);
+});
+```
+
+### Assertions
+
+```javascript
+const {strict: assert} = require("assert");
+
+// Equality
+assert.equal(actual, expected);
+assert.notEqual(actual, unexpected);
+
+// Deep equality (objects/arrays)
+assert.deepEqual(obj1, obj2);
+assert.notDeepEqual(obj1, obj2);
+
+// Boolean
+assert.ok(value);  // truthy
+assert(!value);    // falsy
+
+// Throws
+assert.throws(
+    () => functionThatShouldThrow(),
+    {name: "Error", message: "Expected message"}
+);
+```
+
+### Testing Templates
+
+Use `mock_template` to verify template rendering:
+
+```javascript
+run_test("render_message", ({mock_template}) => {
+    // Mock template without rendering
+    mock_template("message.hbs", false, (data) => {
+        // Verify data passed to template
+        assert.equal(data.sender_name, "Alice");
+        assert.ok(data.timestamp);
+        
+        // Return stub for zjquery
+        return "<div>stub</div>";
+    });
+    
+    // Code that renders message.hbs
+    render_message({sender: "Alice"});
+});
+```
+
+With actual rendering:
+
+```javascript
+run_test("render_message", ({mock_template}) => {
+    mock_template("message.hbs", true, (data, html) => {
+        // Verify data
+        assert.equal(data.sender, "Alice");
+        
+        // Verify rendered HTML
+        assert.ok(html.includes("Alice"));
+        
+        return html;
+    });
+    
+    render_message({sender: "Alice"});
+});
+```
+
+## Example Tests
+
+### Testing Pure Logic
+
+```javascript
+const {zrequire} = require("./lib/namespace.cjs");
+const {run_test} = require("./lib/test.cjs");
+
+const util = zrequire("util");
+
+run_test("extract_pm_recipients", () => {
+    const message = {
+        type: "private",
+        display_recipient: [
+            {email: "alice@example.com"},
+            {email: "bob@example.com"},
+        ],
+    };
+    
+    const recipients = util.extract_pm_recipients(message);
+    
+    assert.deepEqual(recipients.sort(), [
+        "alice@example.com",
+        "bob@example.com",
+    ]);
+});
+```
+
+### Testing DOM Interactions
+
+```javascript
+const {$t} = require("./lib/zjquery.cjs");
+const {zrequire} = require("./lib/namespace.cjs");
+const {run_test} = require("./lib/test.cjs");
+
+const compose_ui = zrequire("compose_ui");
+
+run_test("insert_at_cursor", () => {
+    const $textarea = $("textarea#compose-textarea");
+    
+    // Mock textarea methods
+    $textarea.val("Hello world");
+    $textarea.range = () => ({start: 5, end: 5});  // Cursor after "Hello"
+    
+    // Insert text at cursor
+    compose_ui.insert_syntax_and_focus(", there");
+    
+    // Verify new content
+    assert.equal($textarea.val(), "Hello, there world");
+});
+```
+
+### Testing Event Handlers
+
+```javascript
+run_test("click_to_reply", () => {
+    const $message = $("#message-123");
+    const $reply_button = $(".reply-button");
+    
+    $message.set_find_results(".reply-button", $reply_button);
+    
+    let handler_called = false;
+    $reply_button.on = (event, handler) => {
+        assert.equal(event, "click");
+        // Save handler to call later
+        $reply_button.trigger = () => {
+            handler();
+        };
+    };
+    
+    // Setup code that attaches handlers
+    setup_message_handlers($message);
+    
+    // Verify handler works
+    $reply_button.trigger();
+    // Check expected side effects
+});
+```
+
+## Best Practices
+
+### Do
+
+- ✓ Test one thing per test
+- ✓ Use descriptive test names
+- ✓ Mock external dependencies
+- ✓ Test edge cases (empty arrays, null, undefined)
+- ✓ Verify error handling
+- ✓ Keep tests simple and readable
+
+### Don't
+
+- ✗ Test implementation details
+- ✗ Make tests depend on each other
+- ✗ Use real network requests
+- ✗ Test third-party library code
+- ✗ Have overly complex mocks
+- ✗ Ignore test failures
+
+### Test Organization
+
+```javascript
+// Group related tests
+run_test("parse_valid_input", () => {
+    // Test happy path
+});
+
+run_test("parse_invalid_input", () => {
+    // Test error handling
+});
+
+run_test("parse_empty_input", () => {
+    // Test edge case
+});
+```
+
+## Creating New Tests
+
+The test runner automatically discovers all `.test.cjs` files in `web/tests/`.
+
+<Steps>
+  <Step title="Create test file">
+    ```bash
+    touch web/tests/my_module.test.cjs
+    ```
+  </Step>
+  
+  <Step title="Add basic structure">
+    ```javascript
+    const {strict: assert} = require("assert");
+    const {zrequire} = require("./lib/namespace.cjs");
+    const {run_test} = require("./lib/test.cjs");
+    
+    const my_module = zrequire("my_module");
+    
+    run_test("basic_functionality", () => {
+        // Test code
+    });
+    ```
+  </Step>
+  
+  <Step title="Run test">
+    ```bash
+    ./tools/test-js-with-node my_module
+    ```
+  </Step>
+</Steps>
+
+## Debugging Tests
+
+### Console Output
+
+```javascript
+run_test("debug_test", () => {
+    console.log("Debug info:", variable);
+    
+    // Test code
+});
+```
+
+### Running Single Test
+
+```bash
+# Much faster for iterative debugging
+./tools/test-js-with-node message_list
+```
+
+### Common Issues
+
+**Error: You must create a stub for $("#foo").bar**
+
+```javascript
+// Add stub before code that uses it
+const $elem = $("#foo");
+$elem.bar = () => "stub return value";
+```
+
+**Error: Cannot find module**
+
+```javascript
+// Check spelling
+const util = zrequire("util");  // web/src/util.ts
+
+// Or use full path
+const Filter = zrequire("Filter", "js/filter");
+```
+
+**Test passes but coverage is low**
+
+```bash
+# Generate coverage to see untested lines
+./tools/test-js-with-node --coverage
+```
+
+## Advanced Topics
+
+### Testing Async Code
+
+Node tests run synchronously, but you can test async functions:
+
+```javascript
+run_test("async_function", async () => {
+    const result = await asyncFunction();
+    assert.equal(result, expected);
+});
+```
+
+### Testing Time-Dependent Code
+
+Mock timers:
+
+```javascript
+const {set_global} = require("./lib/test.cjs");
+
+run_test("delayed_action", ({override}) => {
+    let callback_called = false;
+    
+    // Mock setTimeout
+    override(global, "setTimeout", (callback, delay) => {
+        assert.equal(delay, 1000);
+        // Call immediately in test
+        callback();
+    });
+    
+    // Test code that uses setTimeout
+    delayedAction(() => {
+        callback_called = true;
+    });
+    
+    assert.ok(callback_called);
+});
+```
+
+### Custom Matchers
+
+For complex assertions:
+
+```javascript
+function assert_has_class($elem, class_name) {
+    const classes = $elem.attr("class").split(" ");
+    assert.ok(
+        classes.includes(class_name),
+        `Expected element to have class ${class_name}`
+    );
+}
+
+run_test("styling", () => {
+    const $elem = $("#foo");
+    $elem.addClass("active");
+    assert_has_class($elem, "active");
+});
+```
+
+## Related Documentation
+
+- [Testing Overview](/development/testing/overview) - All test types
+- [End-to-End Testing](/development/testing/end-to-end) - Browser tests
+- [zjquery Documentation](https://github.com/zulip/zulip/blob/main/web/tests/lib/zjquery.cjs) - Mock jQuery
+- [Testing Philosophy](/testing/philosophy) - Why we test this way
+
+## Key Files
+
+- `web/tests/*.test.cjs` - Test files
+- `web/tests/lib/namespace.cjs` - Module loading
+- `web/tests/lib/test.cjs` - Test harness
+- `web/tests/lib/zjquery.cjs` - jQuery mocking
+- `web/tests/example1.test.cjs` - Example test file

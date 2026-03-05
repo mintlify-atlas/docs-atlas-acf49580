@@ -1,0 +1,298 @@
+---
+title: Roles & Permissions
+description: Understand Zulip's role-based permission system and how to work with it in the API
+---
+
+Zulip offers several levels of permissions based on a user's role in the organization. This guide explains how roles are represented in the API and how permissions work.
+
+## User Roles
+
+Zulip has five primary user roles, encoded as integers in the `role` property:
+
+| Role | Integer Value |
+|------|---------------|
+| Organization owner | 100 |
+| Organization administrator | 200 |
+| Organization moderator | 300 |
+| Member | 400 |
+| Guest | 600 |
+
+### Role Properties in User Objects
+
+User account data includes these role-related properties:
+
+**Primary Role Field:**
+- `role`: Integer value representing the user's role (preferred for most use cases)
+
+**Boolean Convenience Fields:**
+- `is_owner`: Whether the user is an organization owner
+- `is_admin`: Whether the user is an organization administrator
+- `is_guest`: Whether the user is a guest user
+- `is_moderator`: Whether the user is at least a moderator (only in [POST /register](/api/register-queue) response)
+
+<Tip>
+Use the `role` field in your code rather than the boolean fields. Only `role` is updated by the [events API](/api/get-events), making it more reliable for real-time applications.
+</Tip>
+
+### Example User Object
+
+```json
+{
+  "user_id": 123,
+  "email": "user@example.com",
+  "full_name": "Example User",
+  "role": 200,
+  "is_owner": false,
+  "is_admin": true,
+  "is_guest": false
+}
+```
+
+## Billing Administrators
+
+The `is_billing_admin` property indicates whether a user can manage billing for the organization. This is independent of the user's role and is specific to [paid Zulip Cloud plans](https://zulip.com/plans/).
+
+```json
+{
+  "user_id": 123,
+  "role": 400,
+  "is_billing_admin": true
+}
+```
+
+## API Endpoints for Role Information
+
+These endpoints return user role data:
+
+- [GET /users](/api/get-users) - All users in the organization
+- [GET /users/{user_id}](/api/get-user) - Single user by ID
+- [GET /users/{email}](/api/get-user-by-email) - Single user by email
+- [GET /users/me](/api/get-own-user) - Current authenticated user
+- [POST /register](/api/register-queue) - Initial data for the current user
+- [GET /events](/api/get-events) - Real-time updates including role changes
+
+### Events for Role Changes
+
+When a user's role changes, the events system sends updates:
+
+**realm_user/add event:**
+Sent when a new user is added to the organization.
+
+**realm_user/update event:**
+Sent when a user's role changes.
+
+```json
+{
+  "type": "realm_user",
+  "op": "update",
+  "person": {
+    "user_id": 123,
+    "role": 200
+  }
+}
+```
+
+## Permission Levels
+
+Many Zulip features use permission levels based on roles. Permission levels work as cutoffs - users with the specified role **and above** have the permission.
+
+### Standard Permission Levels
+
+From least to most restrictive:
+
+1. **Everyone** - Any user including guests
+2. **Members** - All non-guest users
+3. **Full members** - Members past the waiting period
+4. **Moderators** - Moderators, administrators, and owners
+5. **Administrators** - Administrators and owners
+6. **Owners** - Organization owners only
+7. **Nobody** - Feature disabled
+
+<Info>
+A permission documented as "moderators only" includes moderators, administrators, and owners.
+</Info>
+
+### Permission Examples
+
+**Message Editing:**
+Organizations can restrict who can edit messages:
+- Everyone (including guests)
+- Members only
+- Full members only
+- Moderators and above
+- Administrators and above
+- Nobody
+
+**Channel Creation:**
+- Everyone
+- Members only
+- Full members only
+- Administrators only
+
+**Wildcard Mentions:**
+- Everyone
+- Members only
+- Full members only
+- Moderators only
+- Administrators only
+- Nobody
+
+## Full Members vs New Members
+
+Organizations can set a **waiting period** before new members become full members. This restricts certain permissions for new users.
+
+### Determining Full Member Status
+
+From [POST /register](/api/register-queue) when `realm` is in `fetch_event_types`:
+
+```json
+{
+  "realm_waiting_period_threshold": 3
+}
+```
+
+This value is in days. Compare it against the user's `date_joined` property:
+
+```python
+from datetime import datetime, timedelta
+
+def is_full_member(user, realm_waiting_period_threshold):
+    if realm_waiting_period_threshold == 0:
+        return True
+    
+    waiting_period = timedelta(days=realm_waiting_period_threshold)
+    return datetime.now() - user['date_joined'] >= waiting_period
+```
+
+### Example Calculation
+
+```json
+{
+  "user_id": 456,
+  "role": 400,
+  "date_joined": "2026-03-01T10:00:00Z",
+  "realm_waiting_period_threshold": 3
+}
+```
+
+If today is March 5, 2026:
+- Days since joining: 4 days
+- Waiting period: 3 days
+- Is full member: **Yes**
+
+## Group-Based Permissions
+
+Some settings use a more flexible system based on [user groups](/api/group-setting-values) rather than simple role-based cutoffs.
+
+These allow fine-grained control, such as:
+- Specific user groups can create channels
+- Certain groups can use wildcard mentions
+- Custom groups can access private channels
+
+See the [group-based settings documentation](/api/group-setting-values) for details.
+
+## Checking Permissions in Code
+
+### Example: Check if User Can Edit Messages
+
+```python
+def can_edit_messages(user_role, setting_value):
+    """
+    Check if a user can edit messages based on role.
+    
+    setting_value mapping:
+    - 1: Everyone
+    - 2: Members (400 and above, excluding guests)
+    - 3: Full members
+    - 4: Moderators (300 and above)
+    - 5: Administrators (200 and above)
+    - 6: Owners (100 only)
+    - 7: Nobody
+    """
+    if setting_value == 7:  # Nobody
+        return False
+    
+    if setting_value == 1:  # Everyone
+        return True
+    
+    if setting_value == 6:  # Owners only
+        return user_role == 100
+    
+    if setting_value == 5:  # Administrators
+        return user_role <= 200
+    
+    if setting_value == 4:  # Moderators
+        return user_role <= 300
+    
+    if setting_value == 2:  # Members
+        return user_role <= 400
+    
+    # Full members require additional date_joined check
+    if setting_value == 3:
+        return user_role <= 400  # Plus full member check
+    
+    return False
+```
+
+### Example: Check Role Hierarchy
+
+```python
+def has_minimum_role(user_role, minimum_role):
+    """
+    Check if user meets minimum role requirement.
+    Lower numbers = higher privileges.
+    """
+    return user_role <= minimum_role
+
+# Examples
+has_minimum_role(200, 300)  # True: Admin >= Moderator
+has_minimum_role(400, 300)  # False: Member < Moderator
+has_minimum_role(100, 200)  # True: Owner >= Admin
+```
+
+## Common Permission Scenarios
+
+### Channel Permissions
+
+Channels have different permission settings:
+
+**Public Channels:**
+- Anyone can subscribe
+- Controlled by organization settings for who can post
+
+**Private Channels:**
+- Only members can access
+- Invitations controlled by channel settings
+
+**Web-Public Channels:**
+- Readable by anyone on the internet
+- Posting restricted to organization members
+
+### Message Permissions
+
+**Sending Messages:**
+- Guests: Can send to channels they're subscribed to
+- Members: Can send to any channel they can access
+
+**Editing/Deleting:**
+- Controlled by organization time limits and role settings
+- Authors can typically edit their own messages
+- Moderators and above can edit/delete any message
+
+**Moving Messages:**
+- Moderators and administrators can move messages to different topics/channels
+
+## Best Practices
+
+1. **Use the `role` field** instead of boolean convenience fields for consistency
+2. **Check permissions server-side** - never trust client-side permission checks alone
+3. **Handle permission errors gracefully** - users may lose permissions between checking and acting
+4. **Cache role information** but subscribe to events for updates
+5. **Document permission requirements** clearly in your API client code
+
+## Related Resources
+
+- [User roles help](/help/user-roles)
+- [Channel permissions](/help/channel-permissions)
+- [Group-based settings](/api/group-setting-values)
+- [GET /events](/api/get-events)

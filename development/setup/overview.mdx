@@ -1,0 +1,97 @@
+---
+title: Development Environment Overview
+description: Choose the right Zulip development environment setup for your system
+---
+
+The Zulip development environment can be installed on **macOS, Windows, and Linux** (Debian or Ubuntu recommended). You'll need at least **2GB of available RAM**.
+
+## Requirements
+
+Installing the Zulip development environment requires:
+
+- **2GB available RAM** (minimum)
+- **Active, reasonably fast internet connection** - You'll download several hundred megabytes of dependencies
+- **Supported operating system** - macOS, Windows 10+, Ubuntu 22.04/24.04, Debian 12/13, or other Linux distributions
+
+<Note>
+You can [configure a proxy](/development/setup/installation#specifying-a-proxy) if you need one.
+</Note>
+
+## Recommended Setup
+
+**For first-time contributors:**
+
+<CardGroup cols={2}>
+  <Card title="Windows" icon="windows">
+    Use WSL 2 (Windows Subsystem for Linux) for the best development experience
+  </Card>
+  <Card title="macOS" icon="apple">
+    Use Vagrant with Docker for an isolated, reliable environment
+  </Card>
+  <Card title="Linux" icon="linux">
+    Use Vagrant with Docker, or install directly on Ubuntu/Debian
+  </Card>
+</CardGroup>
+
+### Why Vagrant?
+
+Vagrant creates a virtual machine (for Windows and macOS) or Linux container (for Linux) where the Zulip server and all related services run. Vagrant:
+
+- Provides an **isolated environment**
+- Is **easy to install, update, and uninstall**
+- Has been **well-tested** with thousands of contributors
+- **Performs well** for development work
+
+The overhead is minimal, and you'll gain significant reliability.
+
+## Advanced Setup Options
+
+Zulip supports several other installation methods:
+
+### Direct Installation
+
+- **Linux platforms** - [Install directly](/development/setup/installation#direct-installation) on Ubuntu, Debian, CentOS, or Fedora
+- **Windows** - [Install directly via WSL 2](/development/setup/installation#windows-wsl-2)
+
+Direct installation can be faster if you have a very slow network connection, since it avoids downloading a virtual machine image.
+
+### Remote Development
+
+The Zulip development environment works well on remote virtual machines. This can be a good option if you have:
+
+- Poor network connectivity
+- Limited storage or memory on your local machine
+
+We recommend giving the Zulip development environment its **own virtual machine** with at least **2GB of memory**, running one of the supported platforms.
+
+For remote development:
+
+- Use [direct installation](/development/setup/installation#direct-installation) if it's the only thing running
+- Use [Vagrant](/development/setup/installation#vagrant-setup) if you need to easily uninstall it
+
+## Slow Internet Connections
+
+If you have a very slow network connection:
+
+1. Avoid using Vagrant (which downloads a Ubuntu virtual machine or Linux container)
+2. [Install directly](/development/setup/installation#direct-installation) on a Linux system
+3. Consider renting a cloud server and [installing remotely](/development/setup/installation#remote-installation)
+
+## Next Steps
+
+Once you've chosen your setup method:
+
+<CardGroup cols={2}>
+  <Card title="Installation Guide" icon="download" href="/development/setup/installation">
+    Follow step-by-step instructions to install the development environment
+  </Card>
+  <Card title="Using the Environment" icon="code" href="/development/setup/using">
+    Learn how to start the server and develop with the environment
+  </Card>
+  <Card title="Testing" icon="flask" href="/development/testing/overview">
+    Understand how to run and write tests for your changes
+  </Card>
+  <Card title="Remote Development" icon="cloud" href="/development/remote">
+    Tips for developing on a remote server
+  </Card>
+</CardGroup>

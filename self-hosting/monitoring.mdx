@@ -1,0 +1,454 @@
+---
+title: Monitoring
+description: Monitor and maintain your Zulip server for optimal performance
+---
+
+Chat is mission-critical to many organizations. This guide covers monitoring your Zulip server to minimize downtime and ensure reliable operation.
+
+## Built-in error reporting
+
+Zulip automatically sends Django error emails to `ZULIP_ADMINISTRATOR` for any backend exceptions.
+
+```python
+# /etc/zulip/settings.py
+ZULIP_ADMINISTRATOR = 'admin@example.com'
+```
+
+<Note>
+A properly functioning Zulip server shouldn't send error emails. Investigate any errors you receive.
+</Note>
+
+## Essential monitoring
+
+### Server health basics
+
+<CardGroup cols={2}>
+  <Card title="Disk Space" icon="hard-drive">
+    Monitor free space on:
+    - Database partition
+    - Upload storage
+    - Log directory
+  </Card>
+  <Card title="Service Uptime" icon="heartbeat">
+    Monitor critical services:
+    - PostgreSQL
+    - Redis
+    - RabbitMQ
+    - nginx
+    - memcached
+  </Card>
+  <Card title="Process Status" icon="list-check">
+    All supervisord services should show `RUNNING`:
+    ```bash
+    supervisorctl status
+    ```
+  </Card>
+  <Card title="OOM Kills" icon="memory">
+    Check for out-of-memory kills:
+    ```bash
+    dmesg | grep -i "killed process"
+    ```
+  </Card>
+</CardGroup>
+
+### Using supervisorctl
+
+Monitor Zulip processes:
+
+```bash
+# Check all services
+supervisorctl status
+
+# Expected output shows all RUNNING:
+# zulip-django          RUNNING   pid 11441, uptime 19:39:57
+# zulip-tornado         RUNNING   pid 11397, uptime 19:40:03
+# zulip-workers:*       RUNNING   ...
+```
+
+<Warning>
+If any service shows a status other than `RUNNING`, or has uptime under 5 seconds (indicates crash-looping), investigate immediately.
+</Warning>
+
+Check service logs:
+```bash
+# Main error log
+tail -f /var/log/zulip/errors.log
+
+# Server logs
+tail -f /var/log/zulip/server.log
+
+# Worker logs
+tail -f /var/log/zulip/workers.log
+```
+
+## Nagios monitoring
+
+Zulip includes Nagios plugins for comprehensive monitoring.
+
+### Available plugins
+
+Plugins are installed in `/usr/lib/nagios/plugins/zulip_*`:
+
+#### Application monitoring
+
+**`check_send_receive_time`**
+
+End-to-end test sending a message between two bot users.
+
+```bash
+/usr/lib/nagios/plugins/zulip_app_frontend/check_send_receive_time \
+    --site=https://zulip.example.com \
+    --warn=5 --crit=10
+```
+
+Tests:
+- Django application health
+- Tornado server health
+- End-to-end message delivery
+
+**`check_rabbitmq_consumers`**
+
+Verifies RabbitMQ consumers are running:
+
+```bash
+/usr/lib/nagios/plugins/zulip_app_frontend/check_rabbitmq_consumers
+```
+
+**`check_rabbitmq_queues`**
+
+Checks for backed-up RabbitMQ queues:
+
+```bash
+/usr/lib/nagios/plugins/zulip_app_frontend/check_rabbitmq_queues \
+    --warn=100 --crit=1000
+```
+
+**`check_worker_memory`**
+
+Monitors for memory leaks in queue workers:
+
+```bash
+/usr/lib/nagios/plugins/zulip_app_frontend/check_worker_memory
+```
+
+#### Database monitoring
+
+**`check_fts_update_log`**
+
+Verifies full-text search updates are processing:
+
+```bash
+/usr/lib/nagios/plugins/zulip_app_frontend/check_fts_update_log
+```
+
+**`check_postgres`**
+
+General PostgreSQL health checks:
+
+```bash
+/usr/lib/nagios/plugins/zulip_postgres_appdb/check_postgres
+```
+
+**`check_postgresql_replication_lag`**
+
+For streaming replication setups:
+
+```bash
+/usr/lib/nagios/plugins/zulip_postgres_appdb/check_postgresql_replication_lag
+```
+
+#### System monitoring
+
+**`check_debian_packages`**
+
+Checks for pending system updates:
+
+```bash
+/usr/lib/nagios/plugins/zulip_base/check_debian_packages
+```
+
+### Nagios configuration
+
+Example Nagios service definition:
+
+```cfg
+define service {
+    use                     generic-service
+    host_name               zulip.example.com
+    service_description     Zulip Send/Receive Time
+    check_command           check_zulip_send_receive!5!10
+    contact_groups          admins
+}
+
+define command {
+    command_name    check_zulip_send_receive
+    command_line    /usr/lib/nagios/plugins/zulip_app_frontend/check_send_receive_time --site=https://$HOSTADDRESS$ --warn=$ARG1$ --crit=$ARG2$
+}
+```
+
+<Tip>
+The complete Nagios configuration for zulip.com is available in `puppet/kandra` in the Zulip Git repository.
+</Tip>
+
+## Prometheus monitoring
+
+Export Zulip metrics to Prometheus:
+
+### WAL-G backup monitoring
+
+Monitor database backups:
+
+```bash
+# Prometheus exporter for WAL-G
+/home/zulip/deployments/current/puppet/zulip/files/postgresql/wal-g-exporter
+```
+
+Metrics exposed:
+- Last backup time
+- Backup success/failure
+- WAL archive status
+
+## Log monitoring
+
+### Key log files
+
+| Log File | Contents |
+|----------|----------|
+| `/var/log/zulip/errors.log` | All errors - check this first |
+| `/var/log/zulip/server.log` | Django and Tornado server logs |
+| `/var/log/zulip/workers.log` | Queue worker logs |
+| `/var/log/zulip/send_email.log` | Email sending attempts |
+| `/var/log/zulip/ldap.log` | LDAP authentication logs |
+
+### Searching logs
+
+Zulip provides a log search tool:
+
+```bash
+# Search server logs
+/home/zulip/deployments/current/scripts/lib/log-search <pattern>
+
+# Example: Find all 500 errors
+/home/zulip/deployments/current/scripts/lib/log-search "500 Internal"
+```
+
+Manual log searching:
+
+```bash
+# Recent errors
+tail -100 /var/log/zulip/errors.log
+
+# Search for pattern
+grep "exception" /var/log/zulip/errors.log
+
+# Follow logs in real-time
+tail -f /var/log/zulip/server.log
+```
+
+## Service troubleshooting
+
+### PostgreSQL
+
+Check PostgreSQL status:
+
+```bash
+# Service status
+systemctl status postgresql
+
+# Connection test
+su postgres -c "psql -d zulip -c 'SELECT version();'"
+
+# Check for slow queries
+sudo -u postgres psql -d zulip -c \
+    "SELECT * FROM pg_stat_activity WHERE state = 'active';"
+```
+
+### RabbitMQ
+
+Check RabbitMQ status:
+
+```bash
+# Service status
+systemctl status rabbitmq-server
+
+# List queues
+rabbitmqctl list_queues
+
+# Check for consumers
+rabbitmqctl list_consumers
+```
+
+Common issue - RabbitMQ not starting:
+
+```bash
+# Often caused by broken DNS
+# Check /etc/hosts configuration
+cat /etc/hosts
+
+# Restart RabbitMQ
+systemctl restart rabbitmq-server
+```
+
+### Redis
+
+Check Redis status:
+
+```bash
+# Service status
+systemctl status redis-server
+
+# Connection test
+redis-cli ping
+# Should return: PONG
+```
+
+### nginx
+
+Check nginx status:
+
+```bash
+# Service status
+systemctl status nginx
+
+# Test configuration
+nginx -t
+
+# Check error log
+tail -f /var/log/nginx/error.log
+```
+
+Common issue - nginx won't start:
+
+```bash
+# Usually SSL certificate problem
+nginx -t
+# Fix SSL configuration and retry:
+systemctl start nginx
+```
+
+## Performance monitoring
+
+### Database performance
+
+```bash
+# Active queries
+su postgres -c "psql -d zulip -c \
+    'SELECT pid, query_start, query FROM pg_stat_activity \
+     WHERE state = \"active\" ORDER BY query_start;'"
+
+# Database size
+su postgres -c "psql -d zulip -c \
+    'SELECT pg_size_pretty(pg_database_size(\"zulip\"));'"
+
+# Table sizes
+su postgres -c "psql -d zulip -c \
+    'SELECT relname, pg_size_pretty(pg_total_relation_size(relid)) \
+     FROM pg_catalog.pg_statio_user_tables \
+     ORDER BY pg_total_relation_size(relid) DESC LIMIT 10;'"
+```
+
+### Memory usage
+
+```bash
+# Overall memory
+free -h
+
+# Per-process memory
+ps aux --sort=-%mem | head -20
+
+# Zulip processes
+supervisorctl status | while read line; do
+    pid=$(echo $line | awk '{print $4}' | tr -d ',')
+    echo "$line"
+    ps -p $pid -o rss= 2>/dev/null | awk '{print $1/1024 " MB"}'
+done
+```
+
+## Disk space monitoring
+
+```bash
+# Overall disk usage
+df -h
+
+# Directory sizes
+du -sh /var/lib/postgresql
+du -sh /home/zulip/uploads
+du -sh /var/log/zulip
+
+# Largest files in logs
+find /var/log/zulip -type f -exec du -h {} + | sort -rh | head -20
+```
+
+<Warning>
+Set up alerts when:
+- Any partition exceeds 80% usage
+- Database partition exceeds 90% usage
+- Rapid disk usage growth detected
+</Warning>
+
+## Automated restarts
+
+Zulip automatically restarts weekly to mitigate potential memory leaks:
+
+```bash
+# View restart schedule
+cat /etc/cron.d/restart-zulip
+
+# Typical schedule: Sunday at 3 AM local time
+```
+
+To change the schedule, edit `/etc/cron.d/restart-zulip`.
+
+## Alerting best practices
+
+<Check>Alert on application health (`check_send_receive_time`)</Check>
+<Check>Alert on queue backups (`check_rabbitmq_queues`)</Check>
+<Check>Alert on disk space (>80% on any partition)</Check>
+<Check>Alert on service downtime (PostgreSQL, RabbitMQ, etc.)</Check>
+<Check>Alert on error rate spikes in logs</Check>
+<Check>Alert on failed backups</Check>
+<Check>Alert on certificate expiration (less than 30 days)</Check>
+
+## Monitoring checklist
+
+Daily:
+- [ ] Check `supervisorctl status` - all services RUNNING
+- [ ] Review `/var/log/zulip/errors.log` for errors
+- [ ] Verify backups completed successfully
+
+Weekly:
+- [ ] Review disk space trends
+- [ ] Check for pending system updates
+- [ ] Review queue worker memory usage
+
+Monthly:
+- [ ] Test backup restoration
+- [ ] Review performance metrics
+- [ ] Check SSL certificate expiration
+- [ ] Review and rotate logs if needed
+
+## Getting help
+
+If monitoring reveals issues:
+
+- Check `/var/log/zulip/errors.log` for detailed errors
+- Review the [troubleshooting guide](/self-hosting/troubleshooting)
+- Visit the [Zulip development community](https://zulip.com/development-community/)
+- Contact [sales@zulip.com](mailto:sales@zulip.com) for enterprise support
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Troubleshooting" icon="wrench" href="/self-hosting/troubleshooting">
+    Debug common Zulip issues
+  </Card>
+  <Card title="Backup & Restore" icon="database" href="/self-hosting/backup-restore">
+    Monitor backup health
+  </Card>
+  <Card title="Upgrade Guide" icon="arrow-up" href="/self-hosting/upgrade">
+    Keep your server updated
+  </Card>
+  <Card title="Performance Tuning" icon="gauge-high" href="https://zulip.readthedocs.io/en/stable/subsystems/performance.html">
+    Optimize server performance
+  </Card>
+</CardGroup>

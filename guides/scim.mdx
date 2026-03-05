@@ -1,0 +1,333 @@
+---
+title: SCIM Provisioning
+description: Set up automated user provisioning and deprovisioning with SCIM
+---
+
+Zulip has beta support for user provisioning and deprovisioning via the SCIM (System for Cross-domain Identity Management) protocol. This allows third-party Identity Providers (IdPs) to automatically manage user accounts in your Zulip organization.
+
+## Overview
+
+In SCIM, a third-party SCIM Identity Provider (IdP) acts as the SCIM client, connecting to Zulip as the service provider. The IdP can:
+
+- Create new user accounts
+- Update user information
+- Deactivate users who leave your organization
+- Manage user attributes
+
+<Info>
+See the [SCIM help center page](https://zulip.com/help/scim) for Zulip Cloud-specific documentation and detailed configuration guides for specific IdP providers.
+</Info>
+
+<Warning>
+Synchronizing groups via SCIM is currently not supported.
+</Warning>
+
+## Server Configuration
+
+Follow these steps to configure SCIM on your Zulip server:
+
+### Step 1: Choose a Client Name
+
+Pick an internal name for your SCIM client. Use your IdP provider's name for clarity:
+
+```
+okta
+azure-ad
+onelogin
+```
+
+### Step 2: Generate a Bearer Token
+
+Create a secure, secret token for authentication. Use a secure password generator:
+
+```bash
+# Using apg (if available)
+apg -m20
+
+# Or using openssl
+openssl rand -base64 32
+```
+
+Save this token securely - you'll need it for IdP configuration.
+
+### Step 3: Configure Zulip Server
+
+Add a `SCIM_CONFIG` block to `/etc/zulip/settings.py`:
+
+```python
+SCIM_CONFIG = {
+    "subdomain": {
+        "bearer_token": "<secret token>",
+        "scim_client_name": "okta",
+        "name_formatted_included": False,
+    }
+}
+```
+
+**Configuration Parameters:**
+
+- **`subdomain`**: Your Zulip organization's subdomain
+- **`bearer_token`**: The secure token you generated
+- **`scim_client_name`**: The client name you chose (e.g., "okta")
+- **`name_formatted_included`**: Set to `False` for Okta; indicates whether the IdP includes `name.formatted` in user representations
+
+### Step 4: Restart Zulip
+
+Apply the configuration changes:
+
+```bash
+/home/zulip/deployments/current/scripts/restart-server
+```
+
+### Step 5: Configure Your IdP
+
+Configure your SCIM IdP with:
+
+**SCIM Base URL:**
+```
+https://your-zulip-domain/scim/v2
+```
+
+**Authentication:**
+```
+Bearer <secret token>
+```
+
+Use the bearer token value from your `SCIM_CONFIG`.
+
+<Tip>
+Refer to the [SCIM help documentation](https://zulip.com/help/scim) for provider-specific configuration guides.
+</Tip>
+
+## Advanced Configuration
+
+### Guest Users Without Default Channels
+
+By default, new guest accounts are automatically subscribed to default channels. To disable this and manually manage guest channel subscriptions:
+
+```python
+SCIM_CONFIG = {
+    "subdomain": {
+        "bearer_token": "<secret token>",
+        "scim_client_name": "okta",
+        "name_formatted_included": False,
+        "create_guests_without_streams": True,
+    }
+}
+```
+
+With `create_guests_without_streams: True`:
+- Guest users are created without any channel subscriptions
+- Administrators must manually invite guests to appropriate channels
+- Useful for organizations with strict guest access control
+
+## Authentication Flow
+
+SCIM requests must include authentication in the `Authorization` header:
+
+```http
+GET /scim/v2/Users HTTP/1.1
+Host: your-zulip-domain
+Authorization: Bearer <secret token>
+```
+
+Zulip validates the bearer token against the value in `SCIM_CONFIG`.
+
+## Supported SCIM Operations
+
+Zulip's SCIM implementation supports:
+
+### User Operations
+
+**List Users:**
+```http
+GET /scim/v2/Users
+```
+
+**Get User:**
+```http
+GET /scim/v2/Users/{user_id}
+```
+
+**Create User:**
+```http
+POST /scim/v2/Users
+Content-Type: application/scim+json
+
+{
+  "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+  "userName": "user@example.com",
+  "name": {
+    "givenName": "Example",
+    "familyName": "User"
+  },
+  "emails": [
+    {
+      "primary": true,
+      "value": "user@example.com"
+    }
+  ],
+  "active": true
+}
+```
+
+**Update User:**
+```http
+PUT /scim/v2/Users/{user_id}
+PATCH /scim/v2/Users/{user_id}
+```
+
+**Deactivate User:**
+```http
+PATCH /scim/v2/Users/{user_id}
+Content-Type: application/scim+json
+
+{
+  "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+  "Operations": [
+    {
+      "op": "replace",
+      "path": "active",
+      "value": false
+    }
+  ]
+}
+```
+
+## User Attributes
+
+Zulip maps SCIM user attributes to Zulip user properties:
+
+| SCIM Attribute | Zulip Property |
+|----------------|----------------|
+| `userName` | Email address |
+| `name.givenName` | First name |
+| `name.familyName` | Last name |
+| `name.formatted` | Full name (if provided) |
+| `active` | Account active status |
+| `emails[0].value` | Email address |
+
+## Security Considerations
+
+### Protect Your Bearer Token
+
+- Store the bearer token securely in `/etc/zulip/settings.py`
+- Use file permissions to restrict access:
+  ```bash
+  chmod 640 /etc/zulip/settings.py
+  chown zulip:zulip /etc/zulip/settings.py
+  ```
+- Never commit the token to version control
+- Rotate the token periodically
+
+### Use HTTPS
+
+<Warning>
+Always use HTTPS for SCIM endpoints. Never send bearer tokens over unencrypted connections.
+</Warning>
+
+Zulip requires HTTPS in production. Ensure your Zulip server has valid TLS certificates.
+
+### IP Allowlisting
+
+Consider restricting SCIM access to your IdP's IP ranges using firewall rules:
+
+```bash
+# Example using iptables
+iptables -A INPUT -p tcp --dport 443 -s <idp-ip-range> -j ACCEPT
+```
+
+## Troubleshooting
+
+### Authentication Failures
+
+**Symptom:** 401 Unauthorized responses
+
+**Solutions:**
+1. Verify the bearer token matches exactly between Zulip config and IdP
+2. Check for extra whitespace in the token
+3. Ensure `Authorization: Bearer <token>` header format is correct
+4. Confirm you restarted Zulip after configuration changes
+
+### User Creation Failures
+
+**Symptom:** 400 Bad Request when creating users
+
+**Solutions:**
+1. Verify email addresses are valid
+2. Check that required fields (`userName`, `emails`) are provided
+3. Ensure email domain is allowed in organization settings
+4. Review Zulip server logs: `/var/log/zulip/errors.log`
+
+### Name Formatting Issues
+
+**Symptom:** User names not displaying correctly
+
+**Solution:**
+Adjust `name_formatted_included` in `SCIM_CONFIG`:
+- `True`: IdP provides `name.formatted` (full name)
+- `False`: Zulip constructs full name from `givenName` and `familyName`
+
+Okta requires `False`.
+
+## Monitoring
+
+Monitor SCIM activity in Zulip logs:
+
+```bash
+# View SCIM-related log entries
+tail -f /var/log/zulip/server.log | grep scim
+
+# Check for SCIM errors
+grep -i "scim" /var/log/zulip/errors.log
+```
+
+## Limitations
+
+<Warning>
+Current limitations:
+
+- **No group synchronization**: User groups cannot be managed via SCIM
+- **No role management**: User roles must be set manually in Zulip
+- **No custom fields**: Only standard SCIM user attributes are supported
+- **Email is immutable**: Changing a user's email requires deactivating and recreating the account
+</Warning>
+
+## Example Configuration
+
+### Complete Okta Configuration
+
+**Zulip `/etc/zulip/settings.py`:**
+```python
+SCIM_CONFIG = {
+    "acme": {
+        "bearer_token": "abc123xyz789secrettoken456",
+        "scim_client_name": "okta",
+        "name_formatted_included": False,
+        "create_guests_without_streams": False,
+    }
+}
+```
+
+**Okta Application Settings:**
+- **SCIM Base URL:** `https://acme.zulipchat.com/scim/v2`
+- **Unique identifier field:** `email`
+- **Supported provisioning actions:** Push New Users, Push Profile Updates, Push Groups
+- **Authentication:** Bearer Token
+- **Token:** `abc123xyz789secrettoken456`
+
+## Migration Guide
+
+If you're adding SCIM to an existing Zulip organization:
+
+1. **Backup your data** before enabling SCIM
+2. **Match existing users** by email address in your IdP
+3. **Test with a few users** before enabling organization-wide
+4. **Monitor closely** during the initial sync
+5. **Document the process** for your team
+
+## Related Resources
+
+- [SCIM Help Center](https://zulip.com/help/scim)
+- [User Management](/help/deactivate-or-reactivate-a-user)
+- [Roles & Permissions](/guides/roles-permissions)

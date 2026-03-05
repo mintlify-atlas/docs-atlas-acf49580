@@ -1,0 +1,524 @@
+---
+title: Installing the Development Environment
+description: Step-by-step instructions for setting up Zulip development on your machine
+---
+
+This guide walks you through installing the Zulip development environment on Windows, macOS, and Linux. Choose the tab for your operating system below.
+
+<Note>
+Before starting, ensure you meet the [requirements](/development/setup/overview#requirements):
+- 2GB available RAM
+- Active internet connection
+- Supported operating system
+</Note>
+
+## Step 0: Set Up Git & GitHub
+
+If you already have Git and GitHub with SSH access set up, skip to Step 1.
+
+<Steps>
+  <Step title="Install Git">
+    Download and install Git from [git-scm.com](https://git-scm.com/)
+  </Step>
+  
+  <Step title="Create a GitHub account">
+    Sign up at [github.com](https://github.com/) if you don't have an account
+  </Step>
+  
+  <Step title="Set up SSH keys">
+    Follow [GitHub's SSH key instructions](https://docs.github.com/en/authentication/connecting-to-github-with-ssh) to create an SSH key and add it to your GitHub account
+  </Step>
+</Steps>
+
+## Step 1: Install Prerequisites
+
+<Tabs>
+  <Tab title="Windows (WSL 2)">
+    ### Windows with WSL 2
+
+    Zulip's development environment is most easily set up on Windows using WSL 2 (Windows Subsystem for Linux). We require version 0.67.6+ of WSL 2.
+
+    <Steps>
+      <Step title="Enable virtualization">
+        Enable virtualization through your BIOS settings. This depends on your hardware, but here are [basic instructions](https://www.thewindowsclub.com/disable-hardware-virtualization-in-windows-10).
+      </Step>
+      
+      <Step title="Install WSL 2">
+        Follow [Microsoft's WSL 2 setup instructions](https://docs.microsoft.com/en-us/windows/wsl/setup/environment), which includes installing an Ubuntu distribution.
+      </Step>
+      
+      <Step title="Create a new WSL instance">
+        We recommend creating a fresh Ubuntu instance for Zulip development to avoid conflicts with other software. See [this article](https://cloudbytes.dev/snippets/how-to-install-multiple-instances-of-ubuntu-in-wsl2) for instructions.
+      </Step>
+      
+      <Step title="Enable systemd">
+        WSL 2 requires `systemd` to manage database, cache and other services. Follow [these instructions](https://learn.microsoft.com/en-us/windows/wsl/wsl-config#systemd-support) to enable it, then restart WSL 2.
+      </Step>
+      
+      <Step title="Update packages">
+        Launch Ubuntu and run:
+        ```bash
+        sudo apt update && sudo apt upgrade
+        ```
+      </Step>
+      
+      <Step title="Install dependencies">
+        Install required services:
+        ```bash
+        sudo apt install rabbitmq-server memcached redis-server postgresql
+        ```
+      </Step>
+      
+      <Step title="Configure RabbitMQ">
+        Edit `/etc/rabbitmq/rabbitmq-env.conf`:
+        ```bash
+        sudo nano /etc/rabbitmq/rabbitmq-env.conf
+        ```
+        
+        Add these lines at the end:
+        ```ini
+        NODE_IP_ADDRESS=127.0.0.1
+        NODE_PORT=5672
+        ```
+        
+        Save with `Ctrl+O`, `Enter`, then exit with `Ctrl+X`.
+      </Step>
+      
+      <Step title="Navigate to WSL disk">
+        Make sure you're in the WSL disk, not a Windows mounted disk:
+        ```bash
+        cd ~  # or cd /home/USERNAME
+        ```
+      </Step>
+      
+      <Step title="Create SSH key">
+        Create a new SSH key for WSL and add it to your GitHub account. SSH keys from Windows won't work inside WSL.
+        
+        Follow [GitHub's SSH key guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account).
+      </Step>
+    </Steps>
+
+    <Note>
+    WSL 2 can be uninstalled by following [Microsoft's documentation](https://learn.microsoft.com/en-us/windows/wsl/faq#how-do-i-uninstall-a-wsl-distribution-).
+    </Note>
+  </Tab>
+  
+  <Tab title="macOS">
+    ### macOS
+
+    <Steps>
+      <Step title="Install Vagrant">
+        Download and install [Vagrant](https://www.vagrantup.com/downloads.html) (latest version).
+      </Step>
+      
+      <Step title="Install Docker Desktop">
+        Download and install [Docker Desktop](https://docs.docker.com/desktop/mac/install/) (latest version).
+      </Step>
+      
+      <Step title="Configure Docker">
+        Open Docker Desktop settings and uncheck "Use gRPC FUSE for file sharing" to use the `osxfs (legacy)` file sharing instead.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Ubuntu/Debian">
+    ### Ubuntu/Debian
+
+    <Steps>
+      <Step title="Install Vagrant">
+        ```bash
+        wget -O - https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+        sudo apt update && sudo apt install vagrant
+        ```
+      </Step>
+      
+      <Step title="Install Docker and Git">
+        ```bash
+        sudo apt install docker.io git
+        ```
+      </Step>
+      
+      <Step title="Add user to docker group">
+        ```bash
+        sudo adduser $USER docker
+        ```
+        
+        Then log out and log back in for the change to take effect.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Fedora">
+    ### Fedora
+
+    <Steps>
+      <Step title="Install packages">
+        ```bash
+        sudo yum install vagrant git moby-engine
+        ```
+        
+        <Note>
+        Fedora provides `moby-engine` instead of the official `docker-ce`. You can also follow [Docker's documentation](https://docs.docker.com/engine/install/fedora/) to install the official Docker distribution.
+        </Note>
+      </Step>
+      
+      <Step title="Add user to docker group">
+        ```bash
+        sudo adduser $USER docker
+        ```
+        
+        Log out and log back in for the change to take effect.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Step 2: Get Zulip Code
+
+<Steps>
+  <Step title="Fork the repository">
+    Visit [github.com/zulip/zulip](https://github.com/zulip/zulip) and click the **Fork** button.
+  </Step>
+  
+  <Step title="Clone your fork">
+    Open your terminal and clone your fork (replace `YOURUSERNAME` with your GitHub username):
+    
+    ```bash
+    git clone --config pull.rebase git@github.com:YOURUSERNAME/zulip.git
+    cd zulip
+    git remote add -f upstream https://github.com/zulip/zulip.git
+    ```
+    
+    This creates a `zulip` directory with the source code.
+  </Step>
+</Steps>
+
+## Step 3: Start the Development Environment
+
+<Tabs>
+  <Tab title="Windows (WSL 2)">
+    ### Windows WSL 2
+
+    <Steps>
+      <Step title="Provision the environment">
+        Install and start the Zulip development environment:
+        ```bash
+        ./tools/provision
+        ```
+        
+        <Note>
+        If Windows Firewall creates popups to block services, click **Allow access**.
+        </Note>
+      </Step>
+      
+      <Step title="Activate Python environment">
+        ```bash
+        source .venv/bin/activate
+        ```
+      </Step>
+      
+      <Step title="Start the development server">
+        ```bash
+        ./tools/run-dev
+        ```
+        
+        If you see errors, try running `./tools/provision` again.
+      </Step>
+      
+      <Step title="Access Zulip">
+        Open your browser and navigate to:
+        
+        **http://localhost:9991/**
+        
+        You'll see a list of users - click any user to log in as them.
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="macOS">
+    ### macOS with Vagrant
+
+    <Steps>
+      <Step title="Start Vagrant">
+        ```bash
+        cd zulip
+        vagrant up --provider=docker
+        ```
+        
+        <Warning>
+        There is a [known upstream issue](https://chat.zulip.org/#narrow/channel/21-provision-help/topic/provision.20error.20ERR_PNPM_LINKING_FAILED/near/1649241) that can cause provisioning to fail with `ERR_PNPM_LINKING_FAILED`. 
+        
+        **Temporary fix:** In Docker Desktop settings, choose `osxfs (legacy)` under file sharing. After `vagrant up` succeeds, return to VirtioFS for proper file syncing.
+        </Warning>
+        
+        This will download the Docker image and set up the development environment. It may take 30-60 minutes on first run.
+      </Step>
+      
+      <Step title="SSH into Vagrant">
+        ```bash
+        vagrant ssh
+        ```
+      </Step>
+      
+      <Step title="Start the development server">
+        Inside the Vagrant environment:
+        ```bash
+        cd /srv/zulip
+        ./tools/run-dev
+        ```
+      </Step>
+      
+      <Step title="Access Zulip">
+        Open your browser and navigate to:
+        
+        **http://localhost:9991/**
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Ubuntu/Debian">
+    ### Ubuntu/Debian with Vagrant
+
+    <Steps>
+      <Step title="Start Vagrant">
+        ```bash
+        cd zulip
+        vagrant up --provider=docker
+        ```
+        
+        This downloads the Docker image and provisions the environment. First run takes 30-60 minutes.
+      </Step>
+      
+      <Step title="SSH into Vagrant">
+        ```bash
+        vagrant ssh
+        ```
+      </Step>
+      
+      <Step title="Start the development server">
+        Inside Vagrant:
+        ```bash
+        cd /srv/zulip
+        ./tools/run-dev
+        ```
+      </Step>
+      
+      <Step title="Access Zulip">
+        Open **http://localhost:9991/** in your browser.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Step 4: Start Developing
+
+### Where to Edit Files
+
+Edit files on your host machine using your favorite editor (VS Code, Sublime, Vim, etc.). Changes are automatically synced to the development environment.
+
+Each component of the Zulip development server automatically restarts or reloads when you save changes. Just reload your browser to see updates.
+
+### Run Linters
+
+Zulip's whitespace rules are enforced by linters:
+
+```bash
+# Run all linters
+./tools/lint
+
+# Run on specific files
+./tools/lint path/to/file.py
+
+# Auto-run on commit
+./tools/setup-git-repo
+```
+
+### VSCode Setup (Optional)
+
+<Tabs>
+  <Tab title="Windows (WSL 2)">
+    Install the [Visual Studio Code Remote - WSL](https://code.visualstudio.com/docs/remote/wsl) extension.
+    
+    Then run:
+    ```bash
+    code .
+    ```
+    
+    This opens VS Code connected to your WSL environment.
+  </Tab>
+  
+  <Tab title="macOS/Linux (Vagrant)">
+    Install the [Visual Studio Code Remote - SSH](https://code.visualstudio.com/docs/remote/ssh) extension.
+    
+    Add this to your SSH config (`~/.ssh/config`):
+    ```
+    Host zulip-dev
+        HostName 127.0.0.1
+        Port 2222
+        User vagrant
+        IdentityFile ~/.vagrant.d/insecure_private_key
+    ```
+    
+    Connect to "zulip-dev" in VS Code's Remote Explorer.
+  </Tab>
+</Tabs>
+
+## Maintaining the Environment
+
+### Update After Rebasing
+
+After rebasing onto a new version of Zulip's `main` branch, re-provision:
+
+<Tabs>
+  <Tab title="WSL 2">
+    ```bash
+    ./tools/provision
+    source .venv/bin/activate
+    ./tools/run-dev
+    ```
+  </Tab>
+  
+  <Tab title="Vagrant">
+    ```bash
+    vagrant provision
+    vagrant ssh
+    cd /srv/zulip
+    ./tools/run-dev
+    ```
+  </Tab>
+</Tabs>
+
+### Rebuild the Environment
+
+If you need to completely rebuild:
+
+<Tabs>
+  <Tab title="WSL 2">
+    ```bash
+    ./tools/rebuild-dev-database
+    ```
+  </Tab>
+  
+  <Tab title="Vagrant">
+    ```bash
+    vagrant destroy
+    vagrant up --provider=docker
+    ```
+  </Tab>
+</Tabs>
+
+### Shut Down the Environment
+
+<Tabs>
+  <Tab title="WSL 2">
+    Simply close your terminal window, or:
+    ```powershell
+    # In PowerShell
+    wsl --terminate <environment_name>
+    ```
+  </Tab>
+  
+  <Tab title="Vagrant">
+    ```bash
+    vagrant halt
+    ```
+    
+    To resume:
+    ```bash
+    vagrant up --provider=docker
+    vagrant ssh
+    ```
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+Most issues are resolved by running `./tools/provision` again.
+
+### Get Help
+
+If you encounter issues:
+
+1. Ask in [#provision help](https://chat.zulip.org/#narrow/channel/21-provision-help) in the Zulip development community
+2. [File an issue](https://github.com/zulip/zulip/issues) on GitHub
+
+When reporting, include:
+
+- Host operating system
+- Installation method (WSL 2 or Vagrant)
+- Whether you're using a proxy
+- Provisioning logs from `/var/log/provision.log` (Vagrant) or `~/zulip/var/log/provision.log` (WSL)
+- Output of `tools/diagnose`
+
+### Common Issues
+
+**Vagrant provisioning fails on macOS**
+
+See the macOS tab above for the Docker Desktop file sharing workaround.
+
+**Permission errors on WSL 2**
+
+Make sure you're in the WSL disk (`cd ~`), not a Windows mounted disk.
+
+**Port 9991 already in use**
+
+Another Zulip development server or process is using port 9991. Stop it first, or configure a different port in `~/.zulip-vagrant-config`:
+
+```
+HOST_PORT 9971
+```
+
+## Advanced Configuration
+
+### Specifying a Proxy
+
+If you need a proxy server:
+
+1. Install the vagrant-proxyconf plugin:
+   ```bash
+   vagrant plugin install vagrant-proxyconf
+   ```
+
+2. Create `~/.zulip-vagrant-config`:
+   ```
+   HTTP_PROXY http://proxy_host:port
+   HTTPS_PROXY http://proxy_host:port
+   NO_PROXY localhost,127.0.0.1,.example.com,.zulipdev.com
+   ```
+
+For authenticated proxies:
+```
+HTTP_PROXY http://userName:userPassword@192.168.1.1:8080
+HTTPS_PROXY http://userName:userPassword@192.168.1.1:8080
+NO_PROXY localhost,127.0.0.1,.example.com,.zulipdev.com
+```
+
+### Customizing Resources
+
+For VM-based providers (VirtualBox, VMware), you can allocate more CPU/RAM.
+
+Create `~/.zulip-vagrant-config`:
+```
+GUEST_CPUS 4
+GUEST_MEMORY_MB 8192
+```
+
+Then run `vagrant reload` to apply the changes.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Using the Dev Environment" icon="code" href="/development/setup/using">
+    Learn how to work with the development server
+  </Card>
+  <Card title="New Feature Tutorial" icon="wand-magic-sparkles" href="/development/tutorials/new-feature">
+    Walk through adding a complete feature to Zulip
+  </Card>
+  <Card title="Testing" icon="flask" href="/development/testing/overview">
+    Understand how to run and write tests
+  </Card>
+  <Card title="Git Guide" icon="code-branch" href="/development/git-guide">
+    Learn Zulip's Git workflows and best practices
+  </Card>
+</CardGroup>

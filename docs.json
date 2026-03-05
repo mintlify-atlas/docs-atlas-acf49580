@@ -1,122 +1,219 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Zulip",
+  "theme": "maple",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#5c9cfc",
+    "light": "#747bfc",
+    "dark": "#aacffa"
   },
-  "favicon": "/favicon.svg",
+
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/zulip/zulip"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/zulip/zulip",
+      "twitter": "https://twitter.com/zulip",
+      "linkedin": "https://www.linkedin.com/company/zulip-project/"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Overview",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "features",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Why Zulip",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "why-zulip/topic-based-threading",
+              "why-zulip/for-open-source",
+              "why-zulip/comparison"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Self-Hosting",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Getting Started",
             "pages": [
-              "api-reference/introduction"
+              "self-hosting/installation",
+              "self-hosting/requirements",
+              "self-hosting/deployment"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Configuration",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "self-hosting/settings",
+              "self-hosting/authentication",
+              "self-hosting/email",
+              "self-hosting/ssl-certificates"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "self-hosting/upgrade",
+              "self-hosting/backup-restore",
+              "self-hosting/monitoring",
+              "self-hosting/troubleshooting"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "self-hosting/multiple-organizations",
+              "self-hosting/mobile-push-notifications",
+              "self-hosting/video-calls",
+              "self-hosting/ai-integrations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/contributing",
+              "development/code-of-conduct",
+              "development/code-style"
+            ]
+          },
+          {
+            "group": "Development Environment",
+            "pages": [
+              "development/setup/overview",
+              "development/setup/installation",
+              "development/setup/using"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "development/architecture/overview",
+              "development/architecture/django-app",
+              "development/architecture/frontend",
+              "development/architecture/realtime-events",
+              "development/architecture/markdown"
+            ]
+          },
+          {
+            "group": "Testing",
+            "pages": [
+              "development/testing/overview",
+              "development/testing/backend",
+              "development/testing/frontend",
+              "development/testing/end-to-end"
+            ]
+          },
+          {
+            "group": "Tutorials",
+            "pages": [
+              "development/tutorials/new-feature",
+              "development/tutorials/integration",
+              "development/tutorials/webhook"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/client-libraries"
+            ]
+          },
+          {
+            "group": "Messages",
+            "pages": [
+              "api/messages/send",
+              "api/messages/get",
+              "api/messages/update",
+              "api/messages/delete",
+              "api/messages/reactions"
+            ]
+          },
+          {
+            "group": "Streams & Topics",
+            "pages": [
+              "api/streams/list",
+              "api/streams/create",
+              "api/streams/update",
+              "api/streams/subscribe",
+              "api/streams/topics"
+            ]
+          },
+          {
+            "group": "Users",
+            "pages": [
+              "api/users/list",
+              "api/users/create",
+              "api/users/update",
+              "api/users/presence"
+            ]
+          },
+          {
+            "group": "Real-time Events",
+            "pages": [
+              "api/events/register",
+              "api/events/get",
+              "api/events/delete"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "api/integrations/overview",
+              "api/integrations/incoming-webhooks",
+              "api/integrations/outgoing-webhooks",
+              "api/integrations/bots"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "guides/message-formatting",
+              "guides/narrowing",
+              "guides/roles-permissions",
+              "guides/scim"
+            ]
+          },
+          {
+            "group": "Subsystems",
+            "pages": [
+              "guides/subsystems/queuing",
+              "guides/subsystems/caching",
+              "guides/subsystems/database",
+              "guides/subsystems/notifications"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

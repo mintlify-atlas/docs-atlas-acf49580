@@ -1,0 +1,279 @@
+---
+title: 'Client Libraries'
+description: 'Official and community-maintained API client libraries'
+---
+
+## Overview
+
+Zulip provides official API client libraries that make it easy to interact with the Zulip REST API in your favorite programming language. These libraries handle authentication, request formatting, and provide convenient wrapper methods.
+
+## Official Libraries
+
+These libraries are maintained by the Zulip core team and are the most complete and best documented.
+
+### Python
+
+The most complete and feature-rich Zulip client library.
+
+#### Installation
+
+```bash
+pip install zulip
+```
+
+#### Quick Start
+
+```python
+import zulip
+
+# Initialize client from config file
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Or initialize with credentials
+client = zulip.Client(
+    email="bot@example.com",
+    api_key="your_api_key",
+    site="https://your-domain.zulipchat.com"
+)
+
+# Send a stream message
+result = client.send_message({
+    "type": "stream",
+    "to": "general",
+    "topic": "API Test",
+    "content": "Hello from Python!"
+})
+
+print(result)
+```
+
+#### Advanced Features
+
+The Python library includes powerful features for building bots:
+
+```python
+# React to every message
+def handle_message(msg):
+    print(f"Received: {msg['content']}")
+    
+client.call_on_each_message(handle_message)
+
+# React to all events
+def handle_event(event):
+    print(f"Event: {event['type']}")
+    
+client.call_on_each_event(handle_event)
+```
+
+<Card title="Python Library Documentation" icon="python" href="https://github.com/zulip/python-zulip-api">
+  View the complete Python library documentation on GitHub
+</Card>
+
+### JavaScript
+
+Official JavaScript/Node.js library for Zulip.
+
+#### Installation
+
+```bash
+npm install zulip-js
+# or
+yarn add zulip-js
+```
+
+#### Quick Start
+
+```javascript
+const zulip = require('zulip-js');
+
+// Initialize client
+const config = {
+  username: 'bot@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Send a stream message
+const params = {
+  type: 'stream',
+  to: 'general',
+  topic: 'API Test',
+  content: 'Hello from JavaScript!'
+};
+
+const result = await client.messages.send(params);
+console.log(result);
+```
+
+#### TypeScript Support
+
+```typescript
+import * as zulip from 'zulip-js';
+
+const config: zulip.ZulipConfig = {
+  username: 'bot@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+```
+
+<Card title="JavaScript Library Documentation" icon="js" href="https://github.com/zulip/zulip-js">
+  View the complete JavaScript library documentation on GitHub
+</Card>
+
+## Community Libraries
+
+The Zulip community maintains libraries for additional programming languages.
+
+<CardGroup cols={2}>
+  <Card title="C#" icon="hashtag" href="https://github.com/zulip/zulip-csharp">
+    .NET/C# client library
+  </Card>
+  <Card title="Go" icon="code" href="https://github.com/ifo/gozulipbot">
+    Go language client
+  </Card>
+  <Card title="Java" icon="mug-hot" href="https://github.com/taliox/zulip-java-rest">
+    Java REST client
+  </Card>
+  <Card title="Kotlin" icon="k" href="https://gitlab.com/ppiag/kzulip">
+    Kotlin client library
+  </Card>
+  <Card title="PHP" icon="php" href="https://github.com/mrferos/zulip-php-client">
+    PHP client library
+  </Card>
+  <Card title="Ruby" icon="gem" href="https://github.com/raws/wonder-llama">
+    Ruby gem for Zulip
+  </Card>
+  <Card title="Swift" icon="swift" href="https://github.com/zulip/swift-zulip-api">
+    Swift client for iOS/macOS
+  </Card>
+  <Card title="Clojure" icon="code" href="https://github.com/thieman/clojure-zulip">
+    Clojure library
+  </Card>
+</CardGroup>
+
+<Info>
+  Community libraries may not support all API features. Check each library's documentation for details.
+</Info>
+
+## Using the REST API Directly
+
+You can also use the Zulip API without a client library using any HTTP client.
+
+### cURL
+
+```bash
+curl -X POST https://your-domain.zulipchat.com/api/v1/messages \
+  -u email@example.com:api_key \
+  -d "type=stream" \
+  -d "to=general" \
+  -d "topic=Test" \
+  -d "content=Hello from cURL!"
+```
+
+### Python requests
+
+```python
+import requests
+from requests.auth import HTTPBasicAuth
+
+auth = HTTPBasicAuth('email@example.com', 'api_key')
+url = 'https://your-domain.zulipchat.com/api/v1/messages'
+
+data = {
+    'type': 'stream',
+    'to': 'general',
+    'topic': 'Test',
+    'content': 'Hello from requests!'
+}
+
+response = requests.post(url, auth=auth, data=data)
+print(response.json())
+```
+
+### JavaScript fetch
+
+```javascript
+const credentials = btoa('email@example.com:api_key');
+
+fetch('https://your-domain.zulipchat.com/api/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Basic ${credentials}`,
+    'Content-Type': 'application/x-www-form-urlencoded'
+  },
+  body: new URLSearchParams({
+    type: 'stream',
+    to: 'general',
+    topic: 'Test',
+    content: 'Hello from fetch!'
+  })
+})
+.then(res => res.json())
+.then(data => console.log(data));
+```
+
+## Command Line Tools
+
+The Python library includes helpful command-line tools.
+
+### zulip-send
+
+Send messages from the command line:
+
+```bash
+# Send to a stream
+echo "Hello!" | zulip-send --stream general --subject "Test"
+
+# Send a direct message
+echo "Hi there" | zulip-send user@example.com
+
+# With inline message
+zulip-send --stream general --subject "Test" -m "Hello from CLI!"
+```
+
+### zulip-api-console
+
+Interactive Python console with a pre-initialized client:
+
+```bash
+zulip-api-console
+
+# In the console:
+>>> client.send_message({...})
+>>> client.get_streams()
+```
+
+## Contributing
+
+We welcome contributions to Zulip's client libraries:
+
+- Report bugs and request features on GitHub
+- Submit pull requests with improvements
+- Create new client libraries for other languages
+- Improve documentation and examples
+
+<Card title="Start Contributing" icon="code-branch" href="https://zulip.readthedocs.io/en/latest/contributing/contributing.html">
+  Learn how to contribute to Zulip
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Set up your API credentials
+  </Card>
+  <Card title="Send a Message" icon="paper-plane" href="/api/messages/send">
+    Try sending your first message
+  </Card>
+  <Card title="Get Messages" icon="inbox" href="/api/messages/get">
+    Retrieve messages from Zulip
+  </Card>
+  <Card title="Real-time Events" icon="bolt" href="/api/events/register">
+    Subscribe to live updates
+  </Card>
+</CardGroup>

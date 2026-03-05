@@ -1,0 +1,348 @@
+---
+title: Message Formatting
+description: Learn how Zulip formats messages using Markdown and special syntax
+---
+
+Zulip supports an extended version of Markdown for messages, along with HTML-level special behaviors. This guide explains how message formatting works and the various markup features available.
+
+## Overview
+
+Zulip's message formatting system processes markdown and generates HTML that clients render. You can test any markdown syntax using the [render a message](/api/render-message) endpoint to see the current HTML output.
+
+## Markdown Features
+
+### Code Blocks
+
+Zulip supports syntax-highlighted code blocks with language specification:
+
+```python
+def hello_world():
+    print("Hello, Zulip!")
+```
+
+Since Zulip 4.0 (feature level 33), code blocks include a `data-code-language` attribute on the outer HTML `div` element:
+
+```html
+<div class="code-block" data-code-language="python">
+  <!-- syntax-highlighted code -->
+</div>
+```
+
+This attribute is used for the [code playgrounds](/help/code-blocks#code-playgrounds) feature.
+
+### Links to Channels, Topics, and Messages
+
+Zulip provides special readable Markdown syntax for linking to conversations:
+
+**Channel Links:**
+```markdown
+#**announce**
+```
+
+Generates:
+```html
+<a class="stream" data-stream-id="9" href="/#narrow/channel/9-announce">
+  #announce
+</a>
+```
+
+**Topic Links:**
+```markdown
+#**announce>Zulip updates**
+```
+
+Generates:
+```html
+<a class="stream-topic" data-stream-id="9"
+  href="/#narrow/channel/9-announce/topic/Zulip.20updates/with/214">
+  #announce &gt; Zulip updates
+</a>
+```
+
+**Message Links:**
+```markdown
+#**announce>Zulip updates@214**
+```
+
+Generates:
+```html
+<a class="message-link"
+  href="/#narrow/channel/9-announce/topic/Zulip.20updates/near/214">
+  #announce &gt; Zulip updates @ 💬
+</a>
+```
+
+The `with` operator in topic links was added in Zulip 10.0 (feature level 347). The server chooses the latest accessible message ID in the topic for the `with` parameter.
+
+<Note>
+The `data-stream-id` field in older link formats is deprecated. Clients should parse the URL to get the current channel name if needed.
+</Note>
+
+### Empty Topics
+
+When a topic is an empty string, it's replaced with `realm_empty_topic_display_name` from the [POST /register](/api/register-queue) response and wrapped with an `<em>` tag:
+
+```html
+<a class="stream-topic" data-stream-id="9"
+  href="/#narrow/channel/9-announce/topic/with/214">
+  #announce &gt; <em>general chat</em>
+</a>
+```
+
+### Global Times
+
+Zulip supports global time mentions that display in each user's local timezone:
+
+```markdown
+<time:2026-03-05T14:30:00Z>
+```
+
+Invalid timestamp formats (since Zulip 12.0, feature level 451) are rendered as escaped literal text:
+
+```html
+&lt;time:invalid&gt;
+```
+
+## Emoji
+
+Zulip supports three types of emoji:
+
+### Unicode Emoji
+
+Standard Unicode emoji like `:smiling_face:` (☺️) are rendered as:
+
+```html
+<span aria-label="smiling face" class="emoji emoji-263a" role="img"
+  title="smiling face">:smiling_face:</span>
+```
+
+The `server_emoji_data_url` in the [POST /register](/api/register-queue) response contains the server's mapping between Unicode codepoints and emoji names.
+
+### Custom Emoji
+
+Realm-specific custom emoji are rendered as images:
+
+```html
+<img alt=":example_custom_emoji:" class="emoji" 
+  title="example_custom_emoji"
+  src="/user_avatars/2/emoji/images/dbe43627.png">
+```
+
+### Large Emoji
+
+Single-paragraph messages containing only emoji are displayed at 2x size (since Zulip 12.0, feature level 436):
+
+```markdown
+🎉 🎊 🥳
+```
+
+Clients should detect emoji-only messages and render them larger for better visual impact.
+
+## Images
+
+### Image Previews
+
+When a message contains a link to an uploaded image, Zulip inserts an image preview:
+
+```html
+<div class="message_inline_image">
+  <a href="/user_uploads/path/to/example.png" title="example.png">
+    <img data-original-dimensions="1920x1080"
+      data-original-content-type="image/png"
+      src="/user_uploads/thumbnail/path/to/example.png/840x560.webp">
+  </a>
+</div>
+```
+
+### Markdown Image Syntax
+
+Images can be embedded using Markdown syntax (for uploaded images only):
+
+```markdown
+![example image](/user_uploads/path/to/example.png)
+```
+
+Generates:
+
+```html
+<img alt="example image" class="inline-image"
+  data-original-dimensions="1050x700"
+  data-original-content-type="image/png"
+  data-original-src="/user_uploads/path/to/example.png"
+  src="/user_uploads/thumbnail/path/to/example.png/840x560.webp">
+```
+
+<Warning>
+Since Zulip 12.0 (feature level 467), Markdown image syntax only supports uploaded images, not third-party URLs.
+</Warning>
+
+### Image Loading Placeholders
+
+When thumbnails are being generated, a temporary placeholder is shown:
+
+```html
+<img class="image-loading-placeholder"
+  data-original-dimensions="1920x1080"
+  data-original-content-type="image/png"
+  src="/path/to/spinner.png">
+```
+
+Once thumbnailing completes, an `update_message` event with `rendering_only: true` updates the message with the actual thumbnail.
+
+### Transcoded Images
+
+Images with formats not widely supported (HEIC, TIFF) include a `data-transcoded-image` attribute:
+
+```html
+<img data-original-content-type="image/heic"
+  data-transcoded-image="1920x1080.webp"
+  src="/user_uploads/thumbnail/path/to/example.heic/840x560.webp">
+```
+
+Clients should use the transcoded version for better compatibility.
+
+### Image Handling Best Practices
+
+1. **Aspect Ratio**: Use `data-original-dimensions` for layout
+2. **Thumbnail Resolution**: Replace the URL suffix with your preferred format from `server_thumbnail_formats`
+3. **Content Type**: Check `data-original-content-type` to determine if you can render the original
+4. **Transcoded Images**: Use `data-transcoded-image` for unsupported formats
+5. **Animated Images**: Check the `data-animated` attribute and respect user preferences
+6. **Lightbox**: Show thumbnails while fetching higher quality versions
+
+## Video and Audio
+
+### Video Previews
+
+Uploaded videos generate inline previews:
+
+```html
+<div class="message_inline_image message_inline_video">
+  <a href="/user_uploads/path/to/video.mp4">
+    <video preload="metadata" src="/user_uploads/path/to/video.mp4">
+    </video>
+  </a>
+</div>
+```
+
+### Audio Players
+
+Audio files (AAC, FLAC, MP3, WAV) are rendered with HTML5 audio players:
+
+```markdown
+![file.mp3](/user_uploads/path/to/file.mp3)
+```
+
+Generates:
+
+```html
+<audio controls preload="metadata"
+  src="/user_uploads/path/to/file.mp3" title="file.mp3">
+</audio>
+```
+
+For external audio URLs, the server may rewrite the URL and provide the original in `data-original-url`.
+
+<Info>
+Audio players were added in Zulip 11.0 (feature level 405).
+</Info>
+
+## Mentions
+
+Zulip supports mentioning users, groups, and wildcard mentions.
+
+### User Mentions
+
+**Regular Mention:**
+```markdown
+@**Example User**
+```
+
+```html
+<span class="user-mention" data-user-id="31">@Example User</span>
+```
+
+**Silent Mention:**
+```markdown
+@_**Example User**
+```
+
+```html
+<span class="user-mention silent" data-user-id="31">Example User</span>
+```
+
+Silent mentions identify the user without triggering notifications or highlights.
+
+### Group Mentions
+
+```markdown
+@*support*
+```
+
+```html
+<span class="user-group-mention" data-user-group-id="17">@support</span>
+```
+
+**Silent Group Mention:**
+```markdown
+@_*support*
+```
+
+### Wildcard Mentions
+
+```markdown
+@**all**
+@**everyone**
+@**channel**
+```
+
+```html
+<span class="user-mention channel-wildcard-mention"
+  data-user-id="*">@channel</span>
+```
+
+### Topic Mentions
+
+```markdown
+@**topic**
+```
+
+```html
+<span class="topic-mention">@topic</span>
+```
+
+### System Groups
+
+When system groups are silently mentioned, display their description rather than API names like `role:nobody`:
+
+```markdown
+@_*role:administrators*
+```
+
+```html
+<span class="user-group-mention silent"
+  data-user-group-id="5">Administrators</span>
+```
+
+<Tip>
+Clients should look up users and groups by ID and update the displayed name to match current data.
+</Tip>
+
+## Spoilers
+
+Zulip supports spoiler blocks (since Zulip 3.0, feature level 15):
+
+```markdown
+```spoiler Spoiler Title
+Hidden content here
+```
+```
+
+This allows hiding content that users can reveal by clicking.
+
+## Related Resources
+
+- [Markdown formatting help](/help/format-your-message-using-markdown)
+- [Send a message](/api/send-message)
+- [Render a message](/api/render-message)
+- [Zulip URLs](/api/zulip-urls)

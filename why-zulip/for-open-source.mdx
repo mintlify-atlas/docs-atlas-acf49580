@@ -1,0 +1,533 @@
+---
+title: Zulip for Open Source
+description: Why Zulip is the chat platform of choice for major open source projects
+---
+
+Zulip is the communication platform of choice for major open source communities including **Rust**, **PureScript**, **Wikimedia**, and hundreds of others. It's also the largest and fastest-growing open source team chat project itself, with over 1,500 contributors and 500+ commits merged per month.
+
+## Why Open Source Projects Choose Zulip
+
+Open source projects have unique communication needs. Contributors are distributed globally, work asynchronously across time zones, and range from core maintainers to first-time contributors. Zulip was designed for exactly this scenario.
+
+<CardGroup cols={2}>
+  <Card title="Free for Open Source" icon="gift">
+    Zulip Cloud Standard is free for open source projects—no strings attached
+  </Card>
+  
+  <Card title="Built by Open Source" icon="code-branch">
+    100% open source (Apache 2.0), built by a global community
+  </Card>
+  
+  <Card title="Async-First" icon="clock">
+    Topic-based threading makes async communication across time zones effortless
+  </Card>
+  
+  <Card title="Welcoming to Newcomers" icon="users">
+    Easy for new contributors to browse, find relevant discussions, and participate
+  </Card>
+</CardGroup>
+
+## The Open Source Communication Challenge
+
+Traditional chat apps fail open source projects in several ways:
+
+### Problem 1: The Firehose Effect
+
+<div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 my-4">
+  <strong>Traditional chat apps:</strong> A new contributor joins and sees 1,000 unread messages in one continuous stream. They have no idea what's relevant or where to start.
+  
+  <p className="mt-2"><strong>Result:</strong> Overwhelmed newcomers leave, or never speak up.</p>
+</div>
+
+<div className="bg-green-50 dark:bg-green-900/20 border-l-4 border-[#5c9cfc] p-4 my-4">
+  <strong>Zulip's solution:</strong> Messages are organized by topic. New contributors see a list of conversations:
+  
+  - "GSoC project ideas" (12 messages)
+  - "Bug #1234 - Memory leak" (5 messages)  
+  - "RFC: New API design" (23 messages)
+  
+  They can browse topics, read what interests them, and participate meaningfully.
+  
+  <p className="mt-2"><strong>Result:</strong> Newcomers can orient themselves and contribute on day one.</p>
+</div>
+
+### Problem 2: Knowledge Gets Lost
+
+<div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 my-4">
+  <strong>Traditional chat apps:</strong> Important discussions disappear into the scroll. Someone asks a question that was answered last month, but nobody can find it.
+  
+  <p className="mt-2"><strong>Result:</strong> Repeated questions, lost decisions, fragmented knowledge.</p>
+</div>
+
+<div className="bg-green-50 dark:bg-green-900/20 border-l-4 border-[#5c9cfc] p-4 my-4">
+  <strong>Zulip's solution:</strong> Every conversation has a topic. Later, you can search:
+  
+  ```
+  stream:development topic:"release process"
+  ```
+  
+  Or link directly to the conversation in documentation:
+  
+  ```markdown
+  For release process discussion, see:
+  https://chat.project.org/#narrow/stream/development/topic/release.20process
+  ```
+  
+  <p className="mt-2"><strong>Result:</strong> Institutional knowledge is preserved and discoverable.</p>
+</div>
+
+### Problem 3: Time Zones Kill Collaboration
+
+<div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 my-4">
+  <strong>Traditional chat apps:</strong> Real-time chat expects immediate responses. Contributors in different time zones can't have meaningful discussions.
+  
+  <p className="mt-2"><strong>Result:</strong> Synchronous bias excludes global contributors.</p>
+</div>
+
+<div className="bg-green-50 dark:bg-green-900/20 border-l-4 border-[#5c9cfc] p-4 my-4">
+  <strong>Zulip's solution:</strong> Topics enable async conversations that span days:
+  
+  - **Monday, 9am ET**: Alice (USA) posts a question
+  - **Monday, 6pm CET**: Bob (Europe) responds with details
+  - **Tuesday, 8am JST**: Carol (Japan) adds her perspective
+  - **Tuesday, 10am ET**: Alice replies with the decision
+  
+  Each message appears in context, forming a coherent conversation.
+  
+  <p className="mt-2"><strong>Result:</strong> Global collaboration that works for everyone's schedule.</p>
+</div>
+
+## Real Open Source Success Stories
+
+### Rust Programming Language
+
+<div className="border-l-4 border-[#5c9cfc] pl-4 my-6">
+  <p className="italic text-lg mb-2">
+    "Zulip's topic-based threading makes it easy for me to catch up on conversations that happened while I was asleep, and participate in conversations across time zones."
+  </p>
+  <p className="text-sm">— <strong>Rust community member</strong></p>
+</div>
+
+The Rust project uses Zulip for:
+- **Coordinating language development** across compiler, library, and tooling teams
+- **Community support** where newcomers can ask questions
+- **Working groups** that plan and execute major initiatives
+- **Async decision making** with contributors across the globe
+
+With hundreds of active contributors and thousands of users, Rust's Zulip instance handles massive scale while remaining organized.
+
+### Key Benefits for Rust:
+
+<AccordionGroup>
+  <Accordion title="Topic-specific discussions">
+    Working groups create topics for specific features or issues. Discussions stay focused and searchable. Contributors can follow topics relevant to their interests.
+  </Accordion>
+  
+  <Accordion title="Inclusive async communication">
+    Core team members in USA, Europe, and Asia can all participate meaningfully in discussions without requiring anyone to work odd hours.
+  </Accordion>
+  
+  <Accordion title="Searchable decisions">
+    Design decisions and rationale are preserved in topics. Link to Zulip conversations from RFCs and documentation.
+  </Accordion>
+  
+  <Accordion title="Welcoming to newcomers">
+    New contributors can browse recent topics in #new-members, find conversations at their skill level, and ask questions without feeling lost.
+  </Accordion>
+</AccordionGroup>
+
+### Other Notable Projects
+
+<CardGroup cols={2}>
+  <Card title="PureScript" icon="code">
+    Functional programming language community uses Zulip for language development, library discussions, and community support.
+  </Card>
+  
+  <Card title="Wikimedia" icon="book">
+    The organization behind Wikipedia uses Zulip for technical collaboration across their global volunteer community.
+  </Card>
+  
+  <Card title="Lean Prover" icon="square-root-variable">
+    Theorem proving community collaborates on mathematics formalization with heavy use of LaTeX math rendering in Zulip.
+  </Card>
+  
+  <Card title="Recurse Center" icon="graduation-cap">
+    Programming community for self-directed learning, with hundreds of concurrent projects being discussed.
+  </Card>
+</CardGroup>
+
+## Features Built for Open Source
+
+### Free Zulip Cloud Standard
+
+Qualifying open source projects get **Zulip Cloud Standard for free**, including:
+
+- Unlimited message history
+- 10 GB file storage
+- Custom integrations and bots
+- Advanced authentication options
+- Priority support from the Zulip team
+- No user limits
+
+To qualify, your project must be:
+- Open source with an OSI-approved license
+- Publicly documented and community-driven
+- Used by others (not internal-only)
+
+[Apply for free hosting →](https://zulip.com/for/open-source/)
+
+<Tip>
+  **Self-host for free**: Zulip is 100% open source. You can also self-host Zulip on your own infrastructure at no cost.
+</Tip>
+
+### GitHub Integration
+
+Deep integration with GitHub workflows:
+
+```python
+# Automatically post to Zulip when:
+- Pull requests opened/merged
+- Issues created/closed/commented
+- Releases published
+- CI/CD status changes
+- Code reviews requested
+- And 20+ other events
+```
+
+Posts appear in organized topics:
+
+```
+#github > zulip/zulip PR #12345
+PR opened: Fix message editing bug
+by @alice · 3 files changed
+
+#github > zulip/zulip Issue #67890  
+Bug: Login fails on Firefox
+by @bob · labeled: bug, high-priority
+```
+
+### Code-Friendly Formatting
+
+Built for technical discussions:
+
+<Accordion title="Syntax-highlighted code blocks">
+  ````markdown
+  ```python
+  def fibonacci(n: int) -> int:
+      """Calculate the nth Fibonacci number."""
+      if n <= 1:
+          return n
+      return fibonacci(n - 1) + fibonacci(n - 2)
+  ```
+  ````
+  
+  Supports 100+ languages with automatic syntax detection.
+</Accordion>
+
+<Accordion title="LaTeX math rendering">
+  Perfect for scientific and mathematical projects:
+  
+  ```
+  $$
+  \int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+  $$
+  ```
+  
+  Renders beautifully inline or in display mode.
+</Accordion>
+
+<Accordion title="Inline code and links">
+  ```markdown
+  Check out the `parse_message()` function in `zerver/lib/message.py`
+  
+  See the docs at https://zulip.readthedocs.io/
+  
+  Related: #1234 (automatic issue linking)
+  ```
+</Accordion>
+
+### Other Integrations
+
+<CardGroup cols={3}>
+  <Card title="CI/CD" icon="gears">
+    Travis CI, CircleCI, Jenkins, GitHub Actions
+  </Card>
+  
+  <Card title="Issue Tracking" icon="list-check">
+    GitHub Issues, GitLab, Jira, Sentry
+  </Card>
+  
+  <Card title="Docs & Communication" icon="book">
+    Read the Docs, Twitter, RSS feeds, email
+  </Card>
+</CardGroup>
+
+## Community Management Features
+
+### Moderation Tools
+
+<Steps>
+  <Step title="User roles">
+    - **Owners**: Full administrative control
+    - **Administrators**: Manage users and settings
+    - **Moderators**: Edit messages and topics
+    - **Members**: Regular contributors
+    - **Guests**: Limited access (for contractors, etc.)
+  </Step>
+  
+  <Step title="Content moderation">
+    - Edit or delete any message
+    - Move messages between topics/channels
+    - Mute or deactivate users
+    - Set posting permissions per channel
+  </Step>
+  
+  <Step title="Spam prevention">
+    - Rate limiting for new users
+    - Email domain restrictions
+    - Invitation-only mode
+    - Custom authentication
+  </Step>
+</Steps>
+
+### Managing Growth
+
+As your project grows:
+
+<AccordionGroup>
+  <Accordion title="Create specialized channels">
+    - **#new-members**: Welcoming new contributors
+    - **#development**: Core development discussions  
+    - **#documentation**: Doc improvements and questions
+    - **#translations**: Localization coordination
+    - **#gsoc**: Google Summer of Code coordination
+    - **#off-topic**: Community building
+  </Accordion>
+  
+  <Accordion title="Set up user groups">
+    Create @-mentionable groups:
+    - `@core-team`: Project maintainers
+    - `@release-managers`: Handle releases
+    - `@security-team`: Security issue responses
+    - `@mentors`: Help new contributors
+  </Accordion>
+  
+  <Accordion title="Configure permissions">
+    Fine-grained control over:
+    - Who can create channels
+    - Who can post in announcement channels
+    - Who can add custom emoji
+    - Who can edit topics
+    - Message editing time limits
+  </Accordion>
+</AccordionGroup>
+
+## Migration Support
+
+Moving from another platform?
+
+### Import from Slack
+
+Zulip provides tools to import:
+- All messages and threads
+- User accounts
+- Channels and private groups
+- File uploads
+- Emoji and reactions
+
+```bash
+# Import Slack workspace
+./manage.py convert_slack_data slack_export.zip --output zulip_export
+./manage.py import zulip_export/
+```
+
+### Import from Other Platforms
+
+- **Mattermost**: Full import support
+- **Gitter**: Import scripts available
+- **RocketChat**: Community import tools
+- **Discord**: Partial import support
+
+Or start fresh—Zulip's topic organization makes it easy for community members to jump in.
+
+## Self-Hosting for Full Control
+
+Many open source projects prefer to self-host:
+
+<CardGroup cols={2}>
+  <Card title="Complete Control" icon="server">
+    - Host on your own infrastructure
+    - Full access to all data
+    - Customize as needed
+    - No vendor lock-in
+  </Card>
+  
+  <Card title="Easy to Deploy" icon="rocket">
+    - Automated installer for Ubuntu/Debian
+    - Official Docker images
+    - Comprehensive documentation
+    - Active community support
+  </Card>
+</CardGroup>
+
+### Self-Hosting Advantages
+
+<AccordionGroup>
+  <Accordion title="Data sovereignty">
+    Keep all messages and data on your own servers. Important for some projects' policies or legal requirements.
+  </Accordion>
+  
+  <Accordion title="Custom branding">
+    Add your project's logo, colors, and custom authentication. Make Zulip feel like part of your project.
+  </Accordion>
+  
+  <Accordion title="Integration with existing systems">
+    Connect to your LDAP, SSO, or custom auth. Integrate with internal tools and services.
+  </Accordion>
+  
+  <Accordion title="No usage limits">
+    Unlimited users, messages, and file storage (only limited by your infrastructure).
+  </Accordion>
+</AccordionGroup>
+
+<Info>
+  Self-hosting Zulip is well-documented and supported. See the [installation guide](/self-hosting/installation) for details.
+</Info>
+
+## Case Study: Zulip's Own Development
+
+Zulip itself is developed using Zulip. The [development community](https://chat.zulip.org) demonstrates Zulip at scale:
+
+- **1,500+ contributors** from around the world
+- **500+ commits** merged per month
+- **Thousands of topics** across dozens of channels
+- **24/7 activity** across all time zones
+- **New contributors** join and make their first contribution every week
+
+### How Zulip Uses Zulip
+
+```
+#development
+├─ Topic: "GSoC 2024 project ideas"
+├─ Topic: "Bug #12345 - Message editing"
+├─ Topic: "RFC: New search syntax"
+└─ Topic: "CI failures on main"
+
+#new members
+├─ Topic: "Introduction - Alice"
+├─ Topic: "Good first issues?"
+└─ Topic: "Development environment help"
+
+#design  
+├─ Topic: "Inbox redesign"
+├─ Topic: "Mobile app navigation"
+└─ Topic: "Color scheme improvements"
+```
+
+Contributors can:
+- Find issues they're interested in
+- Participate in design discussions
+- Get help with development environment
+- Coordinate on features they're building
+- Review code and provide feedback
+
+All asynchronously, across time zones, with full context preserved.
+
+<Tip>
+  **See it yourself**: Visit [chat.zulip.org](https://chat.zulip.org) to experience a large, active open source community using Zulip.
+</Tip>
+
+## Getting Started
+
+<Steps>
+  <Step title="Choose your hosting">
+    - **Zulip Cloud**: Apply for [free hosting for open source](https://zulip.com/for/open-source/)
+    - **Self-host**: Follow the [installation guide](/self-hosting/installation)
+  </Step>
+  
+  <Step title="Set up your organization">
+    - Create channels for different areas (#development, #community, etc.)
+    - Configure authentication (email, GitHub, GitLab, etc.)
+    - Set up integrations (GitHub, CI/CD, etc.)
+    - Customize appearance and settings
+  </Step>
+  
+  <Step title="Invite your community">
+    - Post announcement on your project's website/forum
+    - Add link to Zulip in your GitHub README
+    - Invite core team members first
+    - Create welcome topics for new members
+  </Step>
+  
+  <Step title="Establish conventions">
+    - Document topic naming conventions
+    - Create guides for new contributors
+    - Set up channel purposes and descriptions
+    - Define moderation policies
+  </Step>
+</Steps>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Apply for Free Hosting" icon="gift" href="https://zulip.com/for/open-source/">
+    Get Zulip Cloud Standard free for your open source project
+  </Card>
+  
+  <Card title="Self-Hosting Guide" icon="server" href="/self-hosting/installation">
+    Deploy Zulip on your own infrastructure
+  </Card>
+  
+  <Card title="Visit Dev Community" icon="comments" href="https://chat.zulip.org">
+    See Zulip in action at chat.zulip.org
+  </Card>
+  
+  <Card title="GitHub Integration" icon="github" href="/api/integrations/overview">
+    Set up GitHub webhooks and automation
+  </Card>
+</CardGroup>
+
+## Frequently Asked Questions
+
+<AccordionGroup>
+  <Accordion title="How is Zulip free for open source?">
+    Zulip is committed to supporting open source. Qualifying projects get Zulip Cloud Standard completely free, forever. This is funded by our commercial customers and is part of Zulip's mission.
+  </Accordion>
+  
+  <Accordion title="What makes Zulip better than Slack for open source?">
+    - **Topics** make async collaboration across time zones actually work
+    - **Free for open source** with no message limits (Slack free tier loses history)
+    - **100% open source** so you can self-host and customize
+    - **Built for async** rather than real-time, which fits open source better
+    - **Better for newcomers** who can browse topics and find relevant discussions
+  </Accordion>
+  
+  <Accordion title="Can I migrate from Slack/Gitter/Discord?">
+    Yes! Zulip has import tools for Slack, Mattermost, and scripts for other platforms. Your community can keep its history while gaining better organization.
+  </Accordion>
+  
+  <Accordion title="How does Zulip handle very large communities?">
+    Zulip scales well. The largest Zulip instances have thousands of users and millions of messages. Topics prevent information overload even at scale.
+  </Accordion>
+  
+  <Accordion title="Is self-hosting difficult?">
+    No! Zulip has an automated installer for Ubuntu/Debian that handles everything. Docker images are also available. Documentation is comprehensive and the community is helpful.
+  </Accordion>
+</AccordionGroup>
+
+<div className="bg-gradient-to-r from-[#5c9cfc] to-[#747bfc] rounded-xl p-8 my-8 text-white">
+  <h2 className="text-3xl font-bold mb-4">Join the Open Source Projects Using Zulip</h2>
+  
+  <p className="text-lg mb-6">
+    Hundreds of open source communities have chosen Zulip for its superior organization, async-first design, and welcoming experience for new contributors.
+  </p>
+  
+  <div className="flex gap-4">
+    <a href="https://zulip.com/for/open-source/" className="bg-white text-[#5c9cfc] px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
+      Apply for Free Hosting
+    </a>
+    <a href="https://chat.zulip.org" className="bg-transparent border-2 border-white px-6 py-3 rounded-lg font-semibold hover:bg-white/10 transition-colors">
+      Try the Dev Community
+    </a>
+  </div>
+</div>

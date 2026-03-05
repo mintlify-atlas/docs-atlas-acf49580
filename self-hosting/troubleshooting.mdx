@@ -1,0 +1,533 @@
+---
+title: Troubleshooting
+description: Debug and resolve common Zulip server issues
+---
+
+This guide helps you diagnose and resolve common issues with your Zulip installation. If you need additional help, the [Zulip development community](https://zulip.com/development-community/) provides free, interactive support.
+
+## Getting help
+
+When asking for help:
+
+1. **Describe your issue clearly**: What are you trying to do? What's the problem?
+2. **Include relevant logs**: Post excerpts from `/var/log/zulip/errors.log` or `/var/log/zulip/install.log`
+3. **Specify your Zulip version**: Run `/home/zulip/deployments/current/manage.py version`
+4. **Use code blocks**: Don't post screenshots of log files
+
+<Note>
+Visit [#production help](https://chat.zulip.org/#narrow/channel/31-production-help) in the Zulip development community to ask questions.
+</Note>
+
+For paid support, contact [sales@zulip.com](mailto:sales@zulip.com).
+
+## First steps
+
+### Check the logs
+
+Zulip's logs are in `/var/log/zulip/`:
+
+```bash
+# Main error log - check this first
+tail -100 /var/log/zulip/errors.log
+
+# Server logs (Django and Tornado)
+tail -100 /var/log/zulip/server.log
+
+# Queue worker logs
+tail -100 /var/log/zulip/workers.log
+
+# Installation logs
+tail -100 /var/log/zulip/install.log
+```
+
+### Check service status
+
+Verify all Zulip services are running:
+
+```bash
+supervisorctl status
+```
+
+Expected output shows all services `RUNNING`:
+```
+zulip-django                     RUNNING   pid 11441, uptime 19:39:57
+zulip-tornado                    RUNNING   pid 11397, uptime 19:40:03
+zulip_deliver_scheduled_emails   RUNNING   pid 10289, uptime 19:41:04
+zulip-workers:*                  RUNNING   ...
+```
+
+<Warning>
+If any service shows non-RUNNING status or uptime under 5 seconds (crash-looping), check its specific log file in `/var/log/zulip/`.
+</Warning>
+
+## Common issues
+
+### Installation problems
+
+<AccordionGroup>
+  <Accordion title="Installer fails to complete">
+    The installer is idempotent - you can safely rerun it after fixing issues.
+
+    **Check logs:**
+    ```bash
+    tail -100 /var/log/zulip/install.log
+    ```
+
+    **Common causes:**
+    - Network connectivity issues
+    - Insufficient disk space
+    - Missing dependencies
+    - Incompatible OS version
+
+    **Solutions:**
+    - Verify [system requirements](/self-hosting/requirements)
+    - Ensure internet connectivity
+    - Free up disk space
+    - Rerun installer after fixing issues
+  </Accordion>
+
+  <Accordion title="Can't log in as 'zulip' user">
+    The `zulip` user doesn't have a password by default.
+
+    **Access as zulip:**
+    ```bash
+    # From root
+    su zulip
+
+    # Or via sudo
+    sudo -u zulip bash
+    ```
+
+    If you're already the `zulip` user, you don't need to switch again.
+  </Accordion>
+</AccordionGroup>
+
+### Server access issues
+
+<AccordionGroup>
+  <Accordion title="No web server is running">
+    nginx isn't running, usually due to configuration issues.
+
+    **Check nginx status:**
+    ```bash
+    systemctl status nginx
+    ```
+
+    **Test configuration:**
+    ```bash
+    nginx -t
+    ```
+
+    **Common causes:**
+    - Invalid SSL certificates
+    - Port already in use
+    - Configuration syntax errors
+
+    **Fix and restart:**
+    ```bash
+    # Fix issues shown by nginx -t
+    systemctl restart nginx
+    ```
+  </Accordion>
+
+  <Accordion title="HTTP 400 Bad Request errors">
+    Browser shows "Invalid HTTP_HOST header" error.
+
+    **Cause:** Accessing server via hostname not in `ALLOWED_HOSTS` or different from `EXTERNAL_HOST`.
+
+    **Solution:**
+    1. Edit `/etc/zulip/settings.py`:
+       ```python
+       EXTERNAL_HOST = 'zulip.example.com'
+       ```
+    2. Restart server:
+       ```bash
+       /home/zulip/deployments/current/scripts/restart-server
+       ```
+  </Accordion>
+
+  <Accordion title="SSL/TLS certificate errors">
+    Browser shows certificate warnings or mobile apps won't connect.
+
+    **Check certificate:**
+    ```bash
+    # Verify certificate files exist
+    ls -l /etc/ssl/private/zulip.key
+    ls -l /etc/ssl/certs/zulip.combined-chain.crt
+
+    # Test SSL configuration
+    curl -I https://zulip.example.com
+    ```
+
+    **Common issues:**
+    - Incomplete certificate chain
+    - Expired certificate
+    - Certificate doesn't match hostname
+
+    **Solutions:**
+    - Use Certbot for automatic certificates
+    - Verify certificate includes full chain
+    - See [SSL Certificates](/self-hosting/ssl-certificates) guide
+  </Accordion>
+</AccordionGroup>
+
+### Database issues
+
+<AccordionGroup>
+  <Accordion title="PostgreSQL connection errors">
+    Errors like "could not connect to server" or "FATAL: role does not exist".
+
+    **Check PostgreSQL:**
+    ```bash
+    # Service status
+    systemctl status postgresql
+
+    # Try connecting
+    su postgres -c "psql -d zulip -c 'SELECT 1;'"
+    ```
+
+    **Common fixes:**
+    ```bash
+    # Restart PostgreSQL
+    systemctl restart postgresql
+
+    # Check PostgreSQL logs
+    tail -f /var/log/postgresql/postgresql-*-main.log
+    ```
+  </Accordion>
+
+  <Accordion title="Database disk space full">
+    PostgreSQL errors about disk space.
+
+    **Check space:**
+    ```bash
+    df -h /var/lib/postgresql
+    ```
+
+    **Solutions:**
+    - Clean old backups
+    - Vacuum the database:
+      ```bash
+      su postgres -c "vacuumdb -d zulip -f"
+      ```
+    - Add more disk space
+    - Move database to larger partition
+  </Accordion>
+</AccordionGroup>
+
+### Message queue issues
+
+<AccordionGroup>
+  <Accordion title="RabbitMQ connection errors">
+    AMQPConnectionError or "cannot connect to RabbitMQ".
+
+    **Check RabbitMQ:**
+    ```bash
+    systemctl status rabbitmq-server
+    rabbitmqctl status
+    ```
+
+    **Restart RabbitMQ:**
+    ```bash
+    systemctl restart rabbitmq-server
+    ```
+
+    **Common cause:** Broken DNS configuration in virtual machines.
+
+    **Fix DNS:**
+    ```bash
+    # Check /etc/hosts has correct entries
+    cat /etc/hosts
+    # Should have:
+    # 127.0.0.1 localhost
+    # 127.0.1.1 your-hostname
+    ```
+  </Accordion>
+
+  <Accordion title="Queue backlog">
+    Messages not being delivered, slow notifications.
+
+    **Check queues:**
+    ```bash
+    rabbitmqctl list_queues
+    ```
+
+    **Look for queues with many messages.**
+
+    **Check workers:**
+    ```bash
+    supervisorctl status | grep zulip-workers
+    ```
+
+    **Restart workers:**
+    ```bash
+    supervisorctl restart zulip-workers:*
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Email issues
+
+<AccordionGroup>
+  <Accordion title="Outgoing email not working">
+    Users don't receive confirmation or notification emails.
+
+    **Test email:**
+    ```bash
+    su zulip -c '/home/zulip/deployments/current/manage.py send_test_email user@example.com'
+    ```
+
+    **Check logs:**
+    ```bash
+    tail -f /var/log/zulip/send_email.log
+    tail -f /var/log/zulip/errors.log | grep -i email
+    ```
+
+    **Common issues:**
+    - SMTP credentials incorrect
+    - Firewall blocking outgoing port 587
+    - Email password not set in `/etc/zulip/zulip-secrets.conf`
+
+    See [Email Configuration](/self-hosting/email) for setup help.
+  </Accordion>
+
+  <Accordion title="Emails going to spam">
+    Emails arrive but are marked as spam.
+
+    **Solutions:**
+    - Set up SPF, DKIM, and DMARC records
+    - Use a reputable transactional email service
+    - Ensure sender domain matches configured domain
+    - Check your domain's reputation
+  </Accordion>
+</AccordionGroup>
+
+### Authentication issues
+
+<AccordionGroup>
+  <Accordion title="LDAP authentication failing">
+    Users can't log in with LDAP credentials.
+
+    **Test LDAP:**
+    ```bash
+    /home/zulip/deployments/current/manage.py query_ldap username
+    ```
+
+    **Check logs:**
+    ```bash
+    tail -f /var/log/zulip/ldap.log
+    ```
+
+    **Common issues:**
+    - Incorrect bind DN or password
+    - Wrong user search base
+    - LDAP server not reachable
+    - Attribute mapping errors
+
+    See [Authentication](/self-hosting/authentication) for configuration.
+  </Accordion>
+
+  <Accordion title="Social auth (Google, GitHub) not working">
+    OAuth login buttons don't appear or fail.
+
+    **Verify configuration:**
+    - Check `AUTHENTICATION_BACKENDS` in `/etc/zulip/settings.py`
+    - Verify client ID and secret are correct
+    - Ensure callback URL matches OAuth app settings
+    - Check server restarted after config changes
+
+    **Callback URL format:**
+    ```
+    https://zulip.example.com/complete/{provider}/
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Mobile app issues
+
+<AccordionGroup>
+  <Accordion title="Mobile apps can't connect">
+    iOS/Android apps can't connect to server.
+
+    **Common causes:**
+    - Incomplete SSL certificate chain
+    - Self-signed certificate (not supported)
+    - TLS version too old
+    - Server not accessible from mobile network
+
+    **Test SSL:**
+    ```bash
+    curl -I https://zulip.example.com
+    ```
+
+    Use [SSL Labs tester](https://www.ssllabs.com/ssltest/) for public servers.
+
+    See [SSL Certificates](/self-hosting/ssl-certificates) troubleshooting.
+  </Accordion>
+
+  <Accordion title="Push notifications not working">
+    Users don't receive mobile push notifications.
+
+    **Verify registration:**
+    ```bash
+    grep zulip_org_id /etc/zulip/zulip-secrets.conf
+    ```
+
+    **Check settings:**
+    ```python
+    # In /etc/zulip/settings.py
+    PUSH_NOTIFICATION_BOUNCER_URL = 'https://push.zulipchat.com'
+    ```
+
+    **Test notification:**
+    Follow [testing instructions](https://zulip.com/help/mobile-notifications#testing-mobile-notifications).
+
+    See [Mobile Push Notifications](/self-hosting/mobile-push-notifications) setup.
+  </Accordion>
+</AccordionGroup>
+
+## Performance issues
+
+### Server running slowly
+
+```bash
+# Check CPU usage
+top
+
+# Check memory
+free -h
+
+# Check disk I/O
+iostat -x 1
+
+# Database performance
+su postgres -c "psql -d zulip -c \
+    'SELECT * FROM pg_stat_activity WHERE state = \"active\";'"
+```
+
+**Common solutions:**
+- Add more RAM
+- Upgrade CPU
+- Move database to SSD
+- Enable database connection pooling
+- Use remote PostgreSQL
+
+### High memory usage
+
+```bash
+# Find memory-heavy processes
+ps aux --sort=-%mem | head -20
+
+# Check for memory leaks
+supervisorctl status
+# Look for processes with very high uptimes
+```
+
+**Solutions:**
+- Restart Zulip server weekly (automatic by default)
+- Increase available RAM
+- Check for misbehaving queue workers
+
+## Debugging tools
+
+### Django shell
+
+Access Django's interactive shell:
+
+```bash
+/home/zulip/deployments/current/manage.py shell
+```
+
+Useful for:
+- Querying the database
+- Testing API calls
+- Debugging data issues
+
+### Python debugger
+
+For developers debugging Zulip:
+
+```python
+# Add to code
+import pdb; pdb.set_trace()
+```
+
+### Log search
+
+Search through server logs:
+
+```bash
+/home/zulip/deployments/current/scripts/lib/log-search "error pattern"
+```
+
+## Getting more help
+
+### Information to include
+
+When asking for help, include:
+
+1. **Zulip version:**
+   ```bash
+   /home/zulip/deployments/current/manage.py version
+   ```
+
+2. **Operating system:**
+   ```bash
+   lsb_release -a
+   ```
+
+3. **Error logs:**
+   ```bash
+   tail -100 /var/log/zulip/errors.log
+   ```
+
+4. **Service status:**
+   ```bash
+   supervisorctl status
+   ```
+
+5. **What you're trying to do and what's happening instead**
+
+### Where to get help
+
+<CardGroup cols={2}>
+  <Card title="Community Support" icon="users" href="https://zulip.com/development-community/">
+    Free support in the Zulip development community
+  </Card>
+  <Card title="Enterprise Support" icon="headset" href="mailto:sales@zulip.com">
+    Paid support with SLAs and phone support
+  </Card>
+  <Card title="Documentation" icon="book" href="https://zulip.readthedocs.io">
+    Complete Zulip documentation
+  </Card>
+  <Card title="Bug Reports" icon="bug" href="https://github.com/zulip/zulip/issues">
+    Report bugs on GitHub
+  </Card>
+</CardGroup>
+
+## Prevention and best practices
+
+<Check>Set up [monitoring](/self-hosting/monitoring) to catch issues early</Check>
+<Check>Configure [automated backups](/self-hosting/backup-restore)</Check>
+<Check>Test restores regularly</Check>
+<Check>Subscribe to [zulip-announce](https://groups.google.com/g/zulip-announce) for security updates</Check>
+<Check>Keep Zulip updated to the latest release</Check>
+<Check>Document your configuration changes</Check>
+<Check>Test changes on a staging server first</Check>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" icon="chart-line" href="/self-hosting/monitoring">
+    Set up proactive monitoring
+  </Card>
+  <Card title="Backup & Restore" icon="database" href="/self-hosting/backup-restore">
+    Ensure you can recover from disasters
+  </Card>
+  <Card title="Upgrade Guide" icon="arrow-up" href="/self-hosting/upgrade">
+    Keep your server up to date
+  </Card>
+  <Card title="Security" icon="shield" href="https://zulip.readthedocs.io/en/stable/production/securing-your-zulip-server.html">
+    Secure your Zulip server
+  </Card>
+</CardGroup>

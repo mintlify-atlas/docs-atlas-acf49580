@@ -1,0 +1,378 @@
+---
+title: Upgrade Zulip
+description: Upgrade your Zulip server to the latest version
+---
+
+Zulip makes upgrading straightforward with automated scripts and minimal downtime. We recommend always running the [latest Zulip server release](https://zulip.readthedocs.io/en/stable/overview/release-lifecycle.html) for the best security, features, and stability.
+
+## Upgrading to a release
+
+Upgrade to a new Zulip release with these steps:
+
+<Steps>
+  <Step title="Review upgrade notes">
+    Read the [changelog](https://zulip.readthedocs.io/en/stable/overview/changelog.html#upgrade-notes) for all releases between your current version and the target version.
+  </Step>
+
+  <Step title="Download the release">
+    ```bash
+    curl -fLO https://download.zulip.com/server/zulip-server-latest.tar.gz
+    ```
+
+    To verify the download, check [SHA256 sums](https://download.zulip.com/server/SHA256SUMS.txt).
+  </Step>
+
+  <Step title="Run the upgrade">
+    As root:
+
+    ```bash
+    /home/zulip/deployments/current/scripts/upgrade-zulip zulip-server-latest.tar.gz
+    ```
+
+    The upgrade process takes a few minutes and will briefly restart services.
+  </Step>
+</Steps>
+
+### What happens during upgrade
+
+The upgrade process:
+
+1. Runs `apt-get upgrade` to update system packages
+2. Installs new versions of Zulip dependencies
+3. Stops the Zulip service (brief downtime begins)
+4. Runs `puppet apply` to update system configuration
+5. Runs database migrations
+6. Restarts the Zulip service (downtime ends)
+
+<Info>
+Upgrades typically complete in under 30 seconds of downtime, unless there are expensive database migrations (documented in release notes).
+</Info>
+
+### Expected downtime
+
+Most upgrades complete with **less than 30 seconds** of downtime. Longer downtimes may occur if:
+
+- Database migrations are required (noted in changelog)
+- Large amounts of data need processing
+
+For production systems:
+- Test upgrades on a [backup](https://zulip.readthedocs.io/en/stable/production/export-and-import.html#backups) first
+- Schedule upgrades during off-hours
+- Contact [sales@zulip.com](mailto:sales@zulip.com) for upgrade support
+
+## Upgrading from Git
+
+Upgrade to any Git branch or commit:
+
+<CodeGroup>
+```bash Official Release
+/home/zulip/deployments/current/scripts/upgrade-zulip-from-git 11.5
+```
+
+```bash Maintenance Branch
+/home/zulip/deployments/current/scripts/upgrade-zulip-from-git 11.x
+```
+
+```bash Main Branch
+/home/zulip/deployments/current/scripts/upgrade-zulip-from-git main
+```
+
+```bash Zulip Cloud
+/home/zulip/deployments/current/scripts/upgrade-zulip-from-git zulip-cloud-current
+```
+</CodeGroup>
+
+The Git upgrade process additionally:
+- Fetches the specified Git commit
+- Builds frontend assets using webpack
+
+<Note>
+Upgrading from Git takes longer than release upgrades due to asset compilation.
+</Note>
+
+### Custom Git repository
+
+Use a custom Git repository:
+
+```ini
+# /etc/zulip/zulip.conf
+[deployment]
+git_repo_url = https://github.com/your-org/zulip.git
+```
+
+Then upgrade as normal:
+```bash
+/home/zulip/deployments/current/scripts/upgrade-zulip-from-git your-branch
+```
+
+## Rollback
+
+If an upgrade fails, quickly rollback to the previous version:
+
+```bash
+# Rollback to previous version
+/home/zulip/deployments/last/scripts/restart-server
+
+# Rollback to specific version
+/home/zulip/deployments/2024-12-01-15-30-00/scripts/restart-server
+```
+
+The `restart-server` script:
+- Stops the current Zulip version
+- Starts the specified version
+- Does not undo database migrations
+
+<Warning>
+Rollback is intended for minor releases (e.g., 11.4 to 11.3). Rolling back major releases may require restoring from backup due to database migration changes.
+</Warning>
+
+## Troubleshooting upgrades
+
+The upgrade scripts are idempotent—you can safely rerun them after fixing issues.
+
+### Common issues
+
+<AccordionGroup>
+  <Accordion title="Networking issues">
+    **Symptom**: Upgrade fails to download packages
+
+    **Solution**:
+    - Check internet connectivity
+    - Configure HTTP proxy if needed
+    - Verify firewall allows outgoing HTTPS
+  </Accordion>
+
+  <Accordion title="Out of memory">
+    **Symptom**: webpack build fails during Git upgrades
+
+    **Solution**:
+    ```bash
+    # Stop Zulip to free memory
+    ./scripts/stop-server
+
+    # Run upgrade again
+    ./scripts/upgrade-zulip-from-git main
+    ```
+  </Accordion>
+
+  <Accordion title="Database migration fails">
+    **Symptom**: Error during database migration step
+
+    **Solution**:
+    - Check `/var/log/zulip/upgrade.log` for details
+    - Verify database is accessible
+    - Ensure sufficient disk space
+    - Rerun upgrade after fixing issue
+  </Accordion>
+</AccordionGroup>
+
+### Upgrade logs
+
+Check logs for troubleshooting:
+
+```bash
+# Full upgrade transcript
+tail -f /var/log/zulip/upgrade.log
+
+# Server errors
+tail -f /var/log/zulip/errors.log
+
+# Django logs
+tail -f /var/log/zulip/server.log
+```
+
+## Deployment hooks
+
+Run custom scripts before/after upgrades:
+
+### Pre-deployment hooks
+
+Create `/etc/zulip/pre-deploy.d/your-script.hook`:
+
+```bash
+#!/bin/bash
+set -e
+
+echo "Running pre-deployment checks..."
+echo "Upgrading from $ZULIP_OLD_VERSION to $ZULIP_NEW_VERSION"
+
+# Your custom logic here
+```
+
+Make it executable:
+```bash
+chmod +x /etc/zulip/pre-deploy.d/your-script.hook
+```
+
+### Post-deployment hooks
+
+Create `/etc/zulip/post-deploy.d/your-script.hook`:
+
+```bash
+#!/bin/bash
+set -e
+
+echo "Upgrade complete!"
+echo "Now running $ZULIP_NEW_VERSION"
+
+# Send notification, update monitoring, etc.
+```
+
+<Warning>
+Hooks that exit with non-zero status will abort the upgrade.
+</Warning>
+
+## Upgrading PostgreSQL
+
+PostgreSQL is upgraded separately from Zulip:
+
+<Steps>
+  <Step title="Upgrade Zulip first">
+    Upgrade to the latest Zulip maintenance release for your major version.
+  </Step>
+
+  <Step title="Stop Zulip">
+    ```bash
+    /home/zulip/deployments/current/scripts/stop-server
+    ```
+  </Step>
+
+  <Step title="Take a backup">
+    ```bash
+    /home/zulip/deployments/current/manage.py backup \
+        --output=/home/zulip/postgresql-upgrade.backup.tar.gz
+    ```
+  </Step>
+
+  <Step title="Upgrade PostgreSQL">
+    As root:
+
+    ```bash
+    /home/zulip/deployments/current/scripts/setup/upgrade-postgresql
+    ```
+  </Step>
+
+  <Step title="Start Zulip">
+    ```bash
+    /home/zulip/deployments/current/scripts/start-server
+    ```
+  </Step>
+</Steps>
+
+## Upgrading the OS
+
+When upgrading your operating system (e.g., Ubuntu 22.04 to 24.04):
+
+### Ubuntu 22.04 to 24.04
+
+<Steps>
+  <Step title="Upgrade Zulip">
+    Upgrade to Zulip 8.3+ (which supports Ubuntu 24.04).
+  </Step>
+
+  <Step title="Backup and stop server">
+    ```bash
+    /home/zulip/deployments/current/scripts/stop-server
+    /home/zulip/deployments/current/manage.py backup \
+        --output=/home/zulip/release-upgrade.backup.tar.gz
+    ```
+  </Step>
+
+  <Step title="Remove RabbitMQ">
+    Due to an Ubuntu packaging bug, remove RabbitMQ first:
+
+    ```bash
+    # Check for pending events
+    rabbitmqctl list_queues
+
+    # Process remaining events (optional)
+    su zulip -c '/home/zulip/deployments/current/manage.py process_queue --all'
+
+    # Remove RabbitMQ
+    apt purge rabbitmq-server
+    ```
+  </Step>
+
+  <Step title="Upgrade OS">
+    ```bash
+    sudo -i
+    do-release-upgrade
+    ```
+
+    When prompted about config files, press **N** to keep current versions.
+  </Step>
+
+  <Step title="Reinstall Zulip">
+    ```bash
+    rm -rf /srv/zulip-venv-cache/* /home/zulip/deployments/current/.venv /root/.cache/uv
+    /home/zulip/deployments/current/scripts/lib/upgrade-zulip-stage-2 \
+        /home/zulip/deployments/current/ --ignore-static-assets --audit-fts-indexes
+    ```
+  </Step>
+
+  <Step title="Upgrade PostgreSQL">
+    ```bash
+    /home/zulip/deployments/current/scripts/setup/upgrade-postgresql
+    ```
+  </Step>
+
+  <Step title="Reboot">
+    ```bash
+    reboot
+    ```
+  </Step>
+</Steps>
+
+<Note>
+See the [full upgrade guide](https://zulip.readthedocs.io/en/stable/production/upgrade.html#upgrading-the-operating-system) for other OS versions.
+</Note>
+
+## Update settings documentation
+
+After major version upgrades, update your `settings.py` documentation:
+
+```bash
+# Compare your settings to the latest template
+/home/zulip/deployments/current/scripts/setup/compare-settings-to-template
+```
+
+This shows:
+- Your customizations
+- New settings available
+- Deprecated settings
+
+See [updating settings.py documentation](https://zulip.readthedocs.io/en/stable/production/upgrade.html#updating-settingspy-inline-documentation) for detailed instructions.
+
+## Best practices
+
+<Check>Read changelog before upgrading</Check>
+<Check>Test upgrades on backups first</Check>
+<Check>Subscribe to the [announcements list](https://groups.google.com/g/zulip-announce)</Check>
+<Check>Schedule upgrades during off-hours</Check>
+<Check>Keep regular backups</Check>
+<Check>Monitor after upgrade</Check>
+
+## Getting help
+
+If you encounter issues:
+
+- Check `/var/log/zulip/upgrade.log` and `/var/log/zulip/errors.log`
+- Visit the [Zulip development community](https://zulip.com/development-community/)
+- Contact [sales@zulip.com](mailto:sales@zulip.com) for paid support
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Backup & Restore" icon="database" href="/self-hosting/backup-restore">
+    Set up automated backups
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/self-hosting/monitoring">
+    Monitor your Zulip server
+  </Card>
+  <Card title="Deployment Hooks" icon="webhook" href="/self-hosting/deployment#deployment-hooks">
+    Automate upgrade workflows
+  </Card>
+  <Card title="Changelog" icon="file-lines" href="https://zulip.readthedocs.io/en/stable/overview/changelog.html">
+    Review release notes
+  </Card>
+</CardGroup>

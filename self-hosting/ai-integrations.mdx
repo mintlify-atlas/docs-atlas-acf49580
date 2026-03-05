@@ -1,0 +1,404 @@
+---
+title: AI Integrations
+description: Configure AI features and integrations for your Zulip server
+---
+
+Zulip's topic-based threading makes it ideal for integrating with AI systems. Zulip Server 10.x+ includes built-in AI features, and you can connect custom AI models using the interactive bots API.
+
+## Overview
+
+Zulip supports AI integration in two ways:
+
+<CardGroup cols={2}>
+  <Card title="Built-in AI Features" icon="sparkles">
+    Native features like topic summarization powered by LLMs
+  </Card>
+  <Card title="Custom AI Bots" icon="robot">
+    Build your own AI agents using the interactive bots API
+  </Card>
+</CardGroup>
+
+## Built-in AI features
+
+Zulip 10.x includes a beta topic summarization feature that generates summaries of topic conversations using large language models.
+
+### Data privacy commitment
+
+Zulip takes data privacy seriously:
+
+- **We don't train LLMs on customer data**
+- **We have no plans to do so**
+- **100% open source** - all code is auditable
+- **You control** which AI provider (if any) processes your data
+- **Self-hosting** keeps your data out of AI training sets
+
+### General AI configuration
+
+Configure AI features at three levels:
+
+**Server settings** (`/etc/zulip/settings.py`):
+
+```python
+# Cost controls (per gigatoken)
+INPUT_COST_PER_GIGATOKEN = 1000  # $1 per gigatoken input
+OUTPUT_COST_PER_GIGATOKEN = 3000  # $3 per gigatoken output
+MAX_PER_USER_MONTHLY_AI_COST = 10  # $10 per user per month
+```
+
+**Organization settings** (via web interface):
+
+- Administrators control who can use each AI feature
+- Permissions can be assigned to roles, groups, or individual users
+
+**Personal settings** (via web interface):
+
+- Users can hide AI features with **Hide AI features** preference
+
+## Topic summarization (Beta)
+
+<Warning>
+**Beta feature:** Topic summarization is currently in beta. Not yet available on Zulip Cloud.
+</Warning>
+
+Generate AI-powered summaries of topic conversations.
+
+### How it works
+
+1. User requests a topic summary from the topic actions menu
+2. Zulip fetches recent messages the user can access
+3. Messages are sent to the configured AI model
+4. Model generates a summary
+5. Summary is posted in the topic
+
+**What's included:**
+- Message text content
+- Message metadata
+
+**What's NOT included:**
+- Emoji reactions
+- Images (thumbnails/previews)
+- Uploaded files (unless posted to public channel with [public access option](https://zulip.com/help/public-access-option))
+
+<Warning>
+**LLM limitations:** Summaries may contain errors and hallucinations. Always verify important information.
+</Warning>
+
+### Enable topic summarization
+
+<Steps>
+  <Step title="Choose AI model provider">
+    Zulip uses [LiteLLM](https://www.litellm.ai/) which supports:
+    - OpenAI (GPT-4, GPT-3.5)
+    - Anthropic (Claude)
+    - Google (Gemini, PaLM)
+    - Azure OpenAI
+    - Self-hosted models (Ollama, vLLM, etc.)
+    - And many more
+  </Step>
+
+  <Step title="Configure model">
+    Edit `/etc/zulip/settings.py`:
+
+    ```python
+    # Basic configuration
+    TOPIC_SUMMARIZATION_MODEL = "gpt-4"
+
+    # For Azure OpenAI
+    TOPIC_SUMMARIZATION_MODEL = "azure/gpt-4"
+
+    # For self-hosted Ollama
+    TOPIC_SUMMARIZATION_MODEL = "ollama/llama2"
+    ```
+
+    See [LiteLLM docs](https://docs.litellm.ai/docs/providers) for provider-specific configuration.
+  </Step>
+
+  <Step title="Set API credentials">
+    Add to `/etc/zulip/zulip-secrets.conf`:
+
+    ```ini
+    # For OpenAI
+    openai_api_key = sk-your-api-key-here
+
+    # For Anthropic
+    anthropic_api_key = sk-ant-your-key-here
+
+    # For Azure OpenAI
+    azure_api_key = your-azure-key
+    azure_api_base = https://your-resource.openai.azure.com
+    azure_api_version = 2023-05-15
+    ```
+  </Step>
+
+  <Step title="Configure pricing">
+    Set cost controls in `/etc/zulip/settings.py`:
+
+    ```python
+    # Costs in dollars per gigatoken
+    INPUT_COST_PER_GIGATOKEN = 30000   # $30/gigatoken for GPT-4
+    OUTPUT_COST_PER_GIGATOKEN = 60000  # $60/gigatoken for GPT-4
+
+    # Monthly budget per user
+    MAX_PER_USER_MONTHLY_AI_COST = 10  # $10 per user
+    ```
+  </Step>
+
+  <Step title="Restart Zulip">
+    ```bash
+    /home/zulip/deployments/current/scripts/restart-server
+    ```
+  </Step>
+
+  <Step title="Configure permissions">
+    Organization administrators can configure who can use topic summarization in **Organization settings** > **Organization permissions**.
+  </Step>
+</Steps>
+
+<Warning>
+**Data privacy:** If using a third-party AI platform, you are trusting that provider with the security and confidentiality of all messages sent for summarization.
+</Warning>
+
+### Choosing a model
+
+Model selection considerations:
+
+**Performance:**
+- **~70B parameter models** (e.g., GPT-4, Claude 3) generate significantly better summaries than smaller models
+- **~8B parameter models** may produce less accurate or useful summaries
+
+**Cost:**
+- Most costs are **input tokens** (messages being summarized)
+- Output tokens (the summary) are typically less than 10% of total cost
+- Check your provider's pricing per token
+
+**Recommended models (as of early 2025):**
+- **GPT-4 Turbo** - Good balance of quality and cost
+- **Claude 3 Opus** - Highest quality, higher cost
+- **GPT-3.5 Turbo** - Lower cost, lower quality
+- **Self-hosted LLaMA 70B** - Privacy-focused, requires GPU hardware
+
+### Self-hosted AI models
+
+For maximum privacy, run AI models on your own infrastructure:
+
+**Using Ollama:**
+
+```python
+# /etc/zulip/settings.py
+TOPIC_SUMMARIZATION_MODEL = "ollama/llama2"
+OLLAMA_API_BASE = "http://localhost:11434"  # Your Ollama server
+```
+
+**Using vLLM:**
+
+```python
+# /etc/zulip/settings.py
+TOPIC_SUMMARIZATION_MODEL = "openai/your-model"
+OPENAI_API_BASE = "http://your-vllm-server:8000/v1"
+```
+
+No API key needed for self-hosted models.
+
+## Custom AI bots
+
+Build custom AI agents using Zulip's [interactive bots API](https://zulip.com/api/running-bots).
+
+### Use cases
+
+- **Q&A bot** - Answer questions about your codebase/docs
+- **Code review** - Automated code review feedback
+- **Meeting assistant** - Summarize discussions and extract action items
+- **Content moderation** - Flag inappropriate content
+- **Translation** - Real-time message translation
+- **Support triage** - Route support questions to right team
+
+### Building a bot
+
+<Steps>
+  <Step title="Create bot user">
+    In Zulip web app:
+    1. Go to **Settings** > **Bots**
+    2. Click **Add a new bot**
+    3. Choose **Generic bot**
+    4. Save the API key
+  </Step>
+
+  <Step title="Write bot code">
+    ```python
+    # my_ai_bot.py
+    import zulip
+    import openai
+
+    class AIHandler:
+        def usage(self):
+            return '''AI bot that answers questions.
+            Usage: @bot-name your question here
+            '''
+
+        def handle_message(self, message, bot_handler):
+            content = message['content']
+
+            # Call your AI model
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": content}]
+            )
+
+            bot_handler.send_reply(message, response.choices[0].message.content)
+
+    handler_class = AIHandler
+    ```
+  </Step>
+
+  <Step title="Run bot">
+    ```bash
+    zulip-run-bot my_ai_bot \
+        --config-file ~/zuliprc \
+        --bot-name ai-assistant
+    ```
+  </Step>
+</Steps>
+
+See [bot development guide](https://zulip.com/api/running-bots) for complete documentation.
+
+### Bot deployment
+
+For production bots:
+
+- Run bots as systemd services
+- Monitor bot health
+- Implement rate limiting
+- Add error handling and logging
+- Consider running bots on separate servers
+
+## Privacy and security
+
+### Data handling
+
+<Warning>
+**Third-party AI providers:** When using external AI services, message content is sent to that provider. Ensure this complies with your data policies.
+</Warning>
+
+**Best practices:**
+
+<Check>Use self-hosted models for sensitive data</Check>
+<Check>Review AI provider's privacy policy and data handling</Check>
+<Check>Consider data residency requirements</Check>
+<Check>Configure organization settings to restrict AI feature access</Check>
+<Check>Educate users about what data is sent to AI providers</Check>
+<Check>Monitor AI API usage for unexpected patterns</Check>
+
+### Cost controls
+
+Protect against unexpected costs:
+
+```python
+# /etc/zulip/settings.py
+
+# Per-user monthly budget
+MAX_PER_USER_MONTHLY_AI_COST = 10  # $10
+
+# Track costs in real-time
+# Zulip automatically blocks requests exceeding budget
+```
+
+## Monitoring AI usage
+
+Monitor AI feature usage:
+
+```bash
+# Check AI-related logs
+tail -f /var/log/zulip/errors.log | grep -i "ai\|summarization"
+
+# Database queries for usage stats
+su postgres -c "psql -d zulip -c \
+    'SELECT COUNT(*) FROM zerver_ailog WHERE created_at > NOW() - INTERVAL \"1 day\";'"
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Summarization feature not visible">
+    **Check configuration:**
+    ```python
+    # In /etc/zulip/settings.py
+    TOPIC_SUMMARIZATION_MODEL = "gpt-4"  # Must be set
+    ```
+
+    **Check API credentials** in `/etc/zulip/zulip-secrets.conf`
+
+    **Verify server restarted** after configuration
+
+    **Check organization settings** - feature may be restricted
+  </Accordion>
+
+  <Accordion title="API authentication errors">
+    **Verify API key:**
+    ```bash
+    grep openai_api_key /etc/zulip/zulip-secrets.conf
+    ```
+
+    **Test API key manually:**
+    ```bash
+    curl https://api.openai.com/v1/models \
+        -H "Authorization: Bearer $OPENAI_API_KEY"
+    ```
+
+    **Check API key permissions** with your provider
+  </Accordion>
+
+  <Accordion title="Summaries not generating">
+    **Check logs:**
+    ```bash
+    tail -f /var/log/zulip/errors.log
+    ```
+
+    **Common issues:**
+    - API rate limits exceeded
+    - Monthly budget limit reached
+    - Model not available in your region
+    - Insufficient API credits/quota
+
+    **Verify user has permission** to use AI features
+  </Accordion>
+</AccordionGroup>
+
+## Future AI features
+
+Upcoming Zulip AI capabilities:
+
+- Automatic topic titles
+- Message drafting assistance
+- Intelligent search
+- Sentiment analysis
+- Meeting transcription
+- Multilingual support enhancements
+
+<Note>
+Future AI features will maintain Zulip's commitment to privacy and give self-hosted installations full control over their data.
+</Note>
+
+## Feedback and feature requests
+
+Help shape Zulip's AI features:
+
+- Share feedback in the [Zulip development community](https://zulip.com/development-community/)
+- [Suggest features](https://zulip.readthedocs.io/en/stable/contributing/suggesting-features.html)
+- Report bugs on [GitHub](https://github.com/zulip/zulip/issues)
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Interactive Bots" icon="robot" href="https://zulip.com/api/running-bots">
+    Build custom AI bot integrations
+  </Card>
+  <Card title="Settings" icon="gear" href="/self-hosting/settings">
+    Configure server settings
+  </Card>
+  <Card title="Privacy" icon="shield-check" href="https://zulip.com/security/">
+    Learn about Zulip's privacy commitment
+  </Card>
+  <Card title="Integrations" icon="plug" href="https://zulip.com/integrations/">
+    Explore other Zulip integrations
+  </Card>
+</CardGroup>

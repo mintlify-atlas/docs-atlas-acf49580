@@ -1,0 +1,588 @@
+---
+title: End-to-End Testing
+description: Writing and running Puppeteer tests for complete user workflows
+---
+
+Zulip uses [Puppeteer](https://github.com/puppeteer/puppeteer) for end-to-end testing with a real Chromium browser. These tests verify complete user workflows and browser-specific behavior.
+
+## When to Use E2E Tests
+
+Use Puppeteer tests for:
+
+- ✓ Navigation flows (login, registration)
+- ✓ Browser-specific features (copy/paste, keyboard shortcuts)
+- ✓ Cross-page workflows
+- ✓ Visual/layout verification
+- ✓ Complex user interactions
+
+Use [Node tests](/development/testing/frontend) for:
+
+- ✓ Business logic
+- ✓ Data transformations  
+- ✓ Utility functions
+- ✓ Most frontend code
+
+<Note>
+Node tests are >100x faster. Use Puppeteer only when you need a real browser.
+</Note>
+
+## Running Tests
+
+### Basic Usage
+
+```bash
+# Run all E2E tests
+./tools/test-js-with-puppeteer
+
+# Run specific test file
+./tools/test-js-with-puppeteer compose
+
+# Run multiple test files
+./tools/test-js-with-puppeteer compose settings
+
+# See options
+./tools/test-js-with-puppeteer --help
+```
+
+### Test Output
+
+Tests generate screenshots on failure:
+
+```bash
+# Screenshots saved to:
+var/puppeteer/*.png
+
+# View them after test failures to debug
+```
+
+## Test File Structure
+
+### Location
+
+**Tests**: `web/e2e-tests/*.test.ts`
+
+**Helpers**: `web/e2e-tests/lib/common.ts`
+
+### Example Test
+
+From `web/e2e-tests/compose.test.ts`:
+
+```typescript
+import {strict as assert} from "assert";
+import type {Page} from "puppeteer";
+import * as common from "./lib/common.ts";
+
+async function test_send_message(page: Page): Promise<void> {
+    // Navigate to compose
+    await page.keyboard.press("KeyC");
+    
+    // Wait for compose box
+    await page.waitForSelector("#compose-textarea", {visible: true});
+    
+    // Type message
+    await common.fill_form(page, "form#send_message_form", {
+        stream_message_recipient_stream: "Denmark",
+        stream_message_recipient_topic: "test",
+        content: "Test message",
+    });
+    
+    // Send
+    await page.click("#compose-send-button");
+    
+    // Verify message appears
+    await page.waitForSelector(
+        ".message_row .message_content:contains('Test message')",
+        {visible: true}
+    );
+}
+
+// Main test runner
+common.run_test(test_send_message);
+```
+
+## How Puppeteer Tests Work
+
+These are **black-box tests** that:
+
+1. Launch real Chromium browser (headless)
+2. Connect to Zulip development server
+3. Interact as a user would
+4. Verify results in the browser
+
+### Test Server
+
+The Puppeteer tests run against:
+
+- Standard `run-dev` server
+- Special test database settings (from `zproject/test_extra_settings.py`)
+- Isolated from normal dev environment
+- Same user data as backend tests
+
+## Writing Tests
+
+### Basic Test Structure
+
+```typescript
+import type {Page} from "puppeteer";
+import * as common from "./lib/common.ts";
+
+async function test_my_feature(page: Page): Promise<void> {
+    // 1. Navigate or trigger action
+    await page.goto("http://localhost:9991/");
+    
+    // 2. Wait for element
+    await page.waitForSelector("#login_form", {visible: true});
+    
+    // 3. Interact
+    await page.click("#submit_button");
+    
+    // 4. Verify
+    await page.waitForSelector(".success_message", {visible: true});
+}
+
+common.run_test(test_my_feature);
+```
+
+### Waiting for Elements
+
+<Warning>
+**Critical**: Always wait before interacting. Tests fail nondeterministically without proper waits.
+</Warning>
+
+```typescript
+// Wait for element to appear and be visible
+await page.waitForSelector("#element", {visible: true});
+
+// Wait for element to disappear
+await page.waitForSelector("#element", {hidden: true});
+
+// Wait for element to exist (even if hidden)
+await page.waitForSelector("#element");
+
+// Wait with timeout
+await page.waitForSelector("#element", {
+    visible: true,
+    timeout: 5000  // milliseconds
+});
+
+// Wait for condition
+await page.waitForFunction(
+    () => document.querySelectorAll(".message_row").length > 5
+);
+```
+
+### Clicking Elements
+
+```typescript
+// Simple click
+await page.click("#button");
+
+// Wait then click
+await page.waitForSelector("#button", {visible: true});
+await page.click("#button");
+
+// Click and wait for navigation
+await Promise.all([
+    page.waitForNavigation(),
+    page.click("#submit")
+]);
+```
+
+### Typing Text
+
+```typescript
+// Type in input
+await page.type("#username", "alice@zulip.com");
+
+// Clear then type
+await page.click("#username", {clickCount: 3});  // Select all
+await page.keyboard.press("Backspace");
+await page.type("#username", "bob@zulip.com");
+
+// Press keys
+await page.keyboard.press("Enter");
+await page.keyboard.press("KeyC");  // 'c' key
+
+// Key combinations
+await page.keyboard.down("Control");
+await page.keyboard.press("KeyA");  // Ctrl+A
+await page.keyboard.up("Control");
+```
+
+### Using Common Helpers
+
+```typescript
+import * as common from "./lib/common.ts";
+
+// Fill entire form
+await common.fill_form(page, "form#my-form", {
+    field1: "value1",
+    field2: "value2",
+});
+
+// Log in as user
+await common.log_in(page, "hamlet");
+
+// Send message
+await common.send_message(page, "stream", {
+    stream_name: "Denmark",
+    topic: "test",
+    content: "Hello world",
+});
+
+// Wait for message
+await common.wait_for_message_send_complete(page);
+```
+
+## Testing Common Scenarios
+
+### Testing Keyboard Shortcuts
+
+```typescript
+async function test_compose_shortcut(page: Page): Promise<void> {
+    // Press 'c' to open compose
+    await page.keyboard.press("KeyC");
+    
+    // Wait for compose box
+    await page.waitForSelector("#compose-textarea", {visible: true});
+    
+    // Verify focus
+    const focused = await page.evaluate(
+        () => document.activeElement?.id
+    );
+    assert.equal(focused, "compose-textarea");
+    
+    // Close with Escape
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#compose-textarea", {hidden: true});
+}
+```
+
+### Testing Navigation
+
+```typescript
+async function test_settings_navigation(page: Page): Promise<void> {
+    // Open settings
+    await page.click("#settings-dropdown");
+    await page.waitForSelector("#settings_page", {visible: true});
+    
+    // Click tab
+    await page.click('a[href="#profile"]');
+    await page.waitForSelector("#profile-settings", {visible: true});
+    
+    // Verify URL changed
+    const url = page.url();
+    assert.ok(url.includes("#profile"));
+}
+```
+
+### Testing Forms
+
+```typescript
+async function test_user_creation(page: Page): Promise<void> {
+    await page.goto("http://localhost:9991/#organization/users");
+    
+    // Open user creation dialog
+    await page.click("#add-user-button");
+    await page.waitForSelector("#add-user-modal", {visible: true});
+    
+    // Fill form
+    await common.fill_form(page, "#add-user-form", {
+        email: "newuser@zulip.com",
+        full_name: "New User",
+    });
+    
+    // Submit
+    await page.click("#add-user-submit");
+    
+    // Wait for success
+    await page.waitForSelector(".alert-success", {visible: true});
+}
+```
+
+### Testing Copy/Paste
+
+```typescript
+async function test_copy_message(page: Page): Promise<void> {
+    // Select message text
+    await page.click(".message_content", {clickCount: 3});
+    
+    // Copy
+    await page.keyboard.down("Control");
+    await page.keyboard.press("KeyC");
+    await page.keyboard.up("Control");
+    
+    // Focus compose
+    await page.click("#compose-textarea");
+    
+    // Paste
+    await page.keyboard.down("Control");
+    await page.keyboard.press("KeyV");
+    await page.keyboard.up("Control");
+    
+    // Verify
+    const content = await page.$eval(
+        "#compose-textarea",
+        (el) => (el as HTMLTextAreaElement).value
+    );
+    assert.ok(content.length > 0);
+}
+```
+
+## Debugging Tests
+
+### Screenshots
+
+Automatic screenshots on failure:
+
+```bash
+# View screenshots
+ls var/puppeteer/
+# Shows state when test failed
+```
+
+Manual screenshots:
+
+```typescript
+// Take screenshot for debugging
+await page.screenshot({path: "debug.png"});
+```
+
+### Console Logging
+
+```typescript
+// Log from test
+console.log("Debug info:", variable);
+
+// Capture browser console
+page.on("console", msg => console.log("Browser:", msg.text()));
+
+// Evaluate in browser context
+const result = await page.evaluate(() => {
+    console.log("In browser");
+    return document.title;
+});
+console.log("Page title:", result);
+```
+
+### Common Failure Modes
+
+**Test fails nondeterministically**
+
+- **Cause**: Missing `waitForSelector` 
+- **Fix**: Add waits before all interactions
+
+```typescript
+// Bad
+await page.click("#button");
+
+// Good  
+await page.waitForSelector("#button", {visible: true});
+await page.click("#button");
+```
+
+**Element not visible**
+
+- **Cause**: Animation or modal not fully shown
+- **Fix**: Wait for element to be visible
+
+```typescript
+await page.waitForSelector("#modal", {visible: true});
+// Extra wait for animations
+await page.waitForFunction(
+    '$(":focus").attr("id") === "modal-input"'
+);
+```
+
+**Typing produces partial input**
+
+- **Cause**: App refocuses field during typing
+- **Fix**: Wait for focus to stabilize
+
+```typescript
+// Wait for field to be focused
+await page.waitForFunction(
+    () => document.activeElement?.id === "compose-textarea"
+);
+
+// Then type
+await page.type("#compose-textarea", "Message");
+```
+
+## Best Practices
+
+### Do
+
+- ✓ Use `{visible: true}` with `waitForSelector`
+- ✓ Wait before every interaction
+- ✓ Test complete user workflows
+- ✓ Use helper functions from `common.ts`
+- ✓ Add descriptive function names
+- ✓ Clean up after tests (close modals, etc.)
+
+### Don't
+
+- ✗ Skip waits to "save time" (causes flaky tests)
+- ✗ Hard-code timing with `setTimeout`
+- ✗ Test things better suited to Node tests
+- ✗ Make tests depend on each other
+- ✗ Use `page.evaluate` for assertions (test outside browser)
+
+### Reliable Waits
+
+```typescript
+// Bad: Fixed timeout
+await page.waitForTimeout(1000);  // ✗ Fragile
+
+// Good: Wait for condition
+await page.waitForSelector(".done", {visible: true});  // ✓
+
+// Good: Wait for multiple conditions
+await Promise.all([
+    page.waitForSelector(".indicator", {hidden: true}),
+    page.waitForSelector(".content", {visible: true}),
+]);
+```
+
+## Advanced Techniques
+
+### Testing Drag and Drop
+
+```typescript
+await page.mouse.move(100, 100);
+await page.mouse.down();
+await page.mouse.move(200, 200);
+await page.mouse.up();
+```
+
+### Testing File Upload
+
+```typescript
+const fileInput = await page.$("input[type=file]");
+await fileInput?.uploadFile("/path/to/test-file.png");
+```
+
+### Network Interception
+
+```typescript
+// Mock API response
+await page.setRequestInterception(true);
+page.on("request", request => {
+    if (request.url().includes("/api/v1/messages")) {
+        request.respond({
+            status: 200,
+            body: JSON.stringify({result: "success"}),
+        });
+    } else {
+        request.continue();
+    }
+});
+```
+
+### Custom Waits
+
+```typescript
+// Wait for specific count
+await page.waitForFunction(
+    (count) => document.querySelectorAll(".message").length >= count,
+    {},
+    10  // Wait for 10 messages
+);
+
+// Wait for text content
+await page.waitForFunction(
+    (text) => document.body.textContent?.includes(text),
+    {},
+    "Welcome"
+);
+```
+
+## Test Data
+
+Tests use the same fixture data as backend tests:
+
+- **Users**: hamlet@zulip.com, othello@zulip.com, etc.
+- **Channels**: Denmark, Scotland, Verona
+- **Realm**: zulip organization
+
+Users and passwords defined in `zerver/lib/test_helpers.py`.
+
+## Running Tests 100 Times
+
+To check for flaky tests:
+
+```bash
+# Run locally
+for i in {1..100}; do
+    ./tools/test-js-with-puppeteer compose || break
+done
+
+# In CI
+# Add label "run-e2e-100x" to PR
+```
+
+## Example: Complete Test
+
+```typescript
+import {strict as assert} from "assert";
+import type {Page} from "puppeteer";
+import * as common from "./lib/common.ts";
+
+async function test_edit_message(page: Page): Promise<void> {
+    // Log in
+    await common.log_in(page);
+    
+    // Send initial message
+    await common.send_message(page, "stream", {
+        stream_name: "Denmark",
+        topic: "editing test",
+        content: "Original message",
+    });
+    await common.wait_for_message_send_complete(page);
+    
+    // Find and click edit
+    await page.hover(".message_row:last-child");
+    await page.waitForSelector(".edit_content", {visible: true});
+    await page.click(".edit_content");
+    
+    // Wait for edit box
+    await page.waitForSelector(".message_edit_content", {visible: true});
+    
+    // Edit content
+    await page.click(".message_edit_content", {clickCount: 3});
+    await page.keyboard.press("Backspace");
+    await page.type(".message_edit_content", "Edited message");
+    
+    // Save
+    await page.click(".message_edit_save");
+    
+    // Verify edit
+    await page.waitForFunction(
+        () => document.querySelector(".message_row:last-child .message_content")
+            ?.textContent?.includes("Edited message"),
+        {timeout: 5000}
+    );
+    
+    // Verify edit indicator
+    await page.waitForSelector(
+        ".message_row:last-child .message_edit_notice",
+        {visible: true}
+    );
+}
+
+common.run_test(test_edit_message);
+```
+
+## Related Documentation
+
+- [Testing Overview](/development/testing/overview) - All test types
+- [Frontend Testing](/development/testing/frontend) - Node unit tests
+- [Puppeteer Docs](https://pptr.dev/) - Official Puppeteer documentation
+- [Testing Philosophy](/testing/philosophy) - Why we test this way
+
+## Key Files
+
+- `web/e2e-tests/*.test.ts` - Test files
+- `web/e2e-tests/lib/common.ts` - Helper functions
+- `var/puppeteer/*.png` - Failure screenshots
+- `zproject/test_extra_settings.py` - Test server config

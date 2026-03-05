@@ -1,0 +1,116 @@
+---
+title: 'Get Topics in Channel'
+description: 'GET /api/v1/users/me/{stream_id}/topics - List topics in a channel'
+---
+
+## Endpoint
+
+```
+GET /api/v1/users/me/{stream_id}/topics
+```
+
+Get all topics in a channel.
+
+## Path Parameters
+
+<ParamField path="stream_id" type="integer" required>
+  The ID of the channel.
+</ParamField>
+
+## Response
+
+<ResponseField name="topics" type="array">
+  Array of topic objects.
+</ResponseField>
+
+### Topic Object
+
+<ResponseField name="name" type="string">
+  Topic name.
+</ResponseField>
+
+<ResponseField name="max_id" type="integer">
+  ID of the latest message in this topic.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET https://your-domain.zulipchat.com/api/v1/users/me/42/topics \
+  -u email@example.com:API_KEY
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Get topics in a channel
+result = client.get_stream_topics(42)
+
+for topic in result['topics']:
+    print(f"Topic: {topic['name']} (latest message: {topic['max_id']})")
+```
+
+```javascript JavaScript
+const result = await client.streams.topics.retrieve({
+  stream_id: 42
+});
+
+console.log(result.topics);
+```
+
+</CodeGroup>
+
+## Response Example
+
+<ResponseExample>
+
+```json Success
+{
+  "result": "success",
+  "msg": "",
+  "topics": [
+    {
+      "name": "API Discussion",
+      "max_id": 12345
+    },
+    {
+      "name": "Bug Reports",
+      "max_id": 12340
+    },
+    {
+      "name": "Feature Requests",
+      "max_id": 12330
+    }
+  ]
+}
+```
+
+</ResponseExample>
+
+## Use Cases
+
+- Build topic browsing interfaces
+- Find active discussion topics
+- Implement topic search
+- Track topic activity
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Messages" icon="inbox" href="/api/messages/get">
+    Fetch messages from topics
+  </Card>
+  <Card title="Send Message" icon="paper-plane" href="/api/messages/send">
+    Post to a topic
+  </Card>
+  <Card title="Update Message" icon="pen" href="/api/messages/update">
+    Change message topic
+  </Card>
+  <Card title="List Channels" icon="list" href="/api/streams/list">
+    Get all channels
+  </Card>
+</CardGroup>

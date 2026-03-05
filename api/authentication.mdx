@@ -1,0 +1,212 @@
+---
+title: 'Authentication'
+description: 'Learn how to authenticate with the Zulip API'
+---
+
+## Overview
+
+The Zulip API uses **HTTP Basic Authentication** with your email address and API key. All API requests must be authenticated.
+
+## Authentication Methods
+
+### Basic Auth (Recommended)
+
+Use HTTP Basic Auth with:
+- **Username**: Your Zulip email address
+- **Password**: Your API key
+
+```bash
+curl https://your-domain.zulipchat.com/api/v1/messages \
+  -u email@example.com:your_api_key_here \
+  -d "type=stream" \
+  -d "to=general" \
+  -d "topic=Test" \
+  -d "content=Hello, Zulip!"
+```
+
+### Client Libraries
+
+Official client libraries handle authentication automatically:
+
+<CodeGroup>
+
+```python Python
+import zulip
+
+# Initialize client with API credentials
+client = zulip.Client(config_file="~/zuliprc")
+
+# Or pass credentials directly
+client = zulip.Client(
+    email="email@example.com",
+    api_key="your_api_key_here",
+    site="https://your-domain.zulipchat.com"
+)
+
+# Send a message
+result = client.send_message({
+    "type": "stream",
+    "to": "general",
+    "topic": "Test",
+    "content": "Hello from Python!"
+})
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+// Initialize client
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key_here',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Send a message
+const params = {
+  type: 'stream',
+  to: 'general',
+  topic: 'Test',
+  content: 'Hello from JavaScript!'
+};
+
+const result = await client.messages.send(params);
+```
+
+</CodeGroup>
+
+## Getting Your API Key
+
+### For Your Personal Account
+
+1. Log in to your Zulip organization
+2. Click on your profile picture in the top right
+3. Select **Settings**
+4. Navigate to **Account & privacy**
+5. Under **API key**, click **Manage your API key**
+6. Enter your password and click **Get API key**
+7. Copy your API key
+
+<Warning>
+  Anyone with your API key can impersonate you. Keep it secure and never commit it to version control.
+</Warning>
+
+### For Bots
+
+1. Go to **Settings** → **Your bots**
+2. Create a new bot or select an existing one
+3. Click the **manage bot** icon
+4. Copy the API key from the bot's settings
+
+<Info>
+  Bot accounts are recommended for integrations and automated processes.
+</Info>
+
+## Using a zuliprc File
+
+For convenience with Python and other clients, create a `~/.zuliprc` file:
+
+```ini ~/.zuliprc
+[api]
+email=email@example.com
+key=your_api_key_here
+site=https://your-domain.zulipchat.com
+```
+
+Then use it in your code:
+
+```python
+import zulip
+client = zulip.Client(config_file="~/.zuliprc")
+```
+
+## Fetching API Keys Programmatically
+
+For development and testing, you can fetch an API key programmatically.
+
+### Production (with password)
+
+<Note>
+  This endpoint only works with EmailAuthBackend or LDAPAuthBackend.
+</Note>
+
+```bash
+curl -X POST https://your-domain.zulipchat.com/api/v1/fetch_api_key \
+  -d "username=email@example.com" \
+  -d "password=your_password"
+```
+
+Response:
+
+```json
+{
+  "result": "success",
+  "msg": "",
+  "api_key": "your_api_key_here",
+  "email": "email@example.com",
+  "user_id": 123
+}
+```
+
+### Development Server (no password)
+
+<Warning>
+  This endpoint only works on development servers for testing.
+</Warning>
+
+```bash
+curl -X POST http://localhost:9991/api/v1/dev_fetch_api_key \
+  -d "username=email@example.com"
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Environment Variables">
+    Store API keys in environment variables instead of hardcoding them:
+    
+    ```python
+    import os
+    import zulip
+    
+    client = zulip.Client(
+        email=os.environ['ZULIP_EMAIL'],
+        api_key=os.environ['ZULIP_API_KEY'],
+        site=os.environ['ZULIP_SITE']
+    )
+    ```
+  </Accordion>
+  
+  <Accordion title="Use Bot Accounts">
+    Create dedicated bot accounts for integrations instead of using personal API keys.
+  </Accordion>
+  
+  <Accordion title="Rotate Keys Regularly">
+    Periodically regenerate API keys, especially for production bots.
+  </Accordion>
+  
+  <Accordion title="Use HTTPS">
+    Always use HTTPS endpoints in production to encrypt API keys in transit.
+  </Accordion>
+</AccordionGroup>
+
+## Invalidating API Keys
+
+To invalidate an existing API key, generate a new one:
+
+1. Go to your account or bot settings
+2. Click the **generate new API key** icon
+3. The old API key will immediately stop working
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Client Libraries" icon="code" href="/api/client-libraries">
+    Install official client libraries
+  </Card>
+  <Card title="Send Your First Message" icon="paper-plane" href="/api/messages/send">
+    Try the API with a test message
+  </Card>
+</CardGroup>

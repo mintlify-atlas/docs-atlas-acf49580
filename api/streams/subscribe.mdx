@@ -1,0 +1,79 @@
+---
+title: 'Subscribe to Channels'
+description: 'Manage channel subscriptions'
+---
+
+## Get Subscribed Channels
+
+### Endpoint
+
+```
+GET /api/v1/users/me/subscriptions
+```
+
+Get all channels the user is subscribed to.
+
+### Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET https://your-domain.zulipchat.com/api/v1/users/me/subscriptions \
+  -u email@example.com:API_KEY
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+result = client.get_subscriptions()
+
+for sub in result['subscriptions']:
+    print(f"{sub['name']} - {sub['description']}")
+```
+
+</CodeGroup>
+
+## Subscribe to Channels
+
+See [Create Channels](/api/streams/create) for subscription details.
+
+## Unsubscribe from Channels
+
+### Endpoint
+
+```
+DELETE /api/v1/users/me/subscriptions
+```
+
+Unsubscribe from channels.
+
+### Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X DELETE https://your-domain.zulipchat.com/api/v1/users/me/subscriptions \
+  -u email@example.com:API_KEY \
+  --data-urlencode 'subscriptions=["general", "engineering"]'
+```
+
+```python Python
+result = client.remove_subscriptions(
+    streams=["general", "engineering"]
+)
+```
+
+</CodeGroup>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Channels" icon="list" href="/api/streams/list">
+    Get all channels
+  </Card>
+  <Card title="Create Channel" icon="plus" href="/api/streams/create">
+    Subscribe to channels
+  </Card>
+</CardGroup>

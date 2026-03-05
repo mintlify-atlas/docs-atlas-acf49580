@@ -1,0 +1,249 @@
+---
+title: Realtime Events System
+description: Understanding Zulip's Tornado-based event system for real-time push notifications
+---
+
+Zulip's **events system** is the server-to-client push system that powers real-time synchronization across all connected clients. This document explains the architecture and implementation of Zulip's real-time push system.
+
+## Overview
+
+Any single-page web application like Zulip needs a way to sync changes made by one client to other clients. This is particularly important for a chat application where state is constantly changing. When we talk about clients, think of browser tabs, mobile apps, or API bots that need to receive updates to Zulip data.
+
+In Zulip, we call these updates that need to be sent to other clients **events**. Examples include:
+
+- New messages being sent
+- Channel subscriptions being added or removed
+- User name or avatar changes
+- Organization settings updates
+- Emoji reactions
+- Message edits
+
+## Architecture Components
+
+A successful real-time sync system requires three main components:
+
+<Steps>
+  <Step title="Generation">
+    Generating events when changes happen to data, and determining which users should receive each event.
+  </Step>
+  
+  <Step title="Delivery">
+    Efficiently delivering those events to interested clients, ideally in an exactly-once fashion.
+  </Step>
+  
+  <Step title="UI Updates">
+    Updating the UI in the client once it has received events from the server.
+  </Step>
+</Steps>
+
+## Event Generation
+
+Zulip's generation system is built around a Python function:
+
+```python
+send_event_on_commit(realm, event, users)
+```
+
+This function accepts:
+
+- **realm**: Used for sharding
+- **event**: A Python dictionary with event data (always contains a `type` key)
+- **users**: List of user IDs whose clients should receive the event
+
+The data is marshalled as JSON and placed in the `notify_tornado` RabbitMQ queue for consumption by the delivery system.
+
+### Target Users
+
+Typically, the list of users is one of:
+
+- **Single user** - for user-level settings changes
+- **Everyone in the realm** - for organization-level settings (e.g., new realm emoji)
+- **Message recipients** - subscribers to a channel or participants in a direct message thread
+
+<Warning>
+It's the caller's responsibility to choose the user list correctly. Sending events to too many users can create security problems; sending to too few causes sync bugs.
+</Warning>
+
+### Transaction Safety
+
+As indicated by the name, `send_event_on_commit` should be called inside the database transaction that changes the state. This ensures events are only sent if the transaction successfully commits.
+
+## Event Delivery System
+
+Zulip's event delivery system is based on **Tornado**, which is ideal for handling a large number of open requests. The implementation is approximately 2000 lines of code in `zerver/tornado/`, primarily in `zerver/tornado/event_queue.py`.
+
+### Long-Polling Protocol
+
+The system uses **long-polling**: clients make `GET /json/events` calls, and the server doesn't respond until it has an event to deliver. This approach:
+
+- Is reasonably efficient
+- Works everywhere (unlike websockets which have compatibility issues)
+- Supports exactly-once delivery
+
+### Event Queues
+
+For each connected client, the event queue server maintains an **event queue** containing events to be delivered that haven't been acknowledged.
+
+Key components in `zerver/tornado/event_queue.py`:
+
+```python
+class ClientDescriptor:
+    def __init__(
+        self,
+        *,
+        user_profile_id: int,
+        user_recipient_id: int | None,
+        realm_id: int,
+        event_queue: "EventQueue",
+        event_types: Sequence[str] | None,
+        client_type_name: str,
+        # ... additional parameters for client capabilities
+    ) -> None:
+        # Manages connection state for a single client
+```
+
+### Protocol Flow
+
+<Steps>
+  <Step title="Client Registration">
+    Client makes `POST /json/register` to create an event queue and receive a `queue_id` and initial `last_event_id`.
+  </Step>
+  
+  <Step title="Event Polling">
+    Client enters infinite loop calling `GET /json/events` with `queue_id` and `last_event_id`.
+  </Step>
+  
+  <Step title="Event Delivery">
+    Server returns events when available or waits (long-polling) until events arrive.
+  </Step>
+  
+  <Step title="Acknowledgment">
+    Client updates `last_event_id` to acknowledge received events. Server safely deletes acknowledged events.
+  </Step>
+</Steps>
+
+### Exactly-Once Delivery
+
+The `last_event_id` parameter enables exactly-once delivery despite network failures:
+
+- Without it, the server would delete events as soon as it attempted to send them
+- If the HTTP response failed due to network issues, those events would be lost
+- With `last_event_id`, events are only deleted after client acknowledgment
+
+### Heartbeats and Timeouts
+
+The system sends heartbeat events every ~45 seconds to prevent NAT servers from killing idle connections:
+
+```python
+# From zerver/tornado/event_queue.py
+DEFAULT_EVENT_QUEUE_TIMEOUT_SECS = 60 * 10  # 10 minutes
+HEARTBEAT_MIN_FREQ_SECS = 45
+
+def create_heartbeat_event() -> dict[str, str]:
+    return dict(type="heartbeat")
+```
+
+### Garbage Collection
+
+Queues are garbage collected after 10 minutes of inactivity:
+
+- Assumes the client has gone offline or no longer exists
+- When clients return with an invalid queue, they get a "queue not found" error
+- Clients handle this by restarting/reloading to refetch initial data
+- If the event queue server crashes, clients recover automatically
+
+```python
+# Garbage collection frequency
+EVENT_QUEUE_GC_FREQ_MSECS = 1000 * 60 * 1  # 1 minute
+```
+
+## Initial Data Fetch
+
+When a client starts, it needs two things:
+
+1. **Current state** - settings, users, channels, messages, etc.
+2. **Event subscription** - to receive updates when data changes
+
+These must be obtained atomically to avoid race conditions.
+
+### Atomicity Algorithm
+
+The `register` API request (in `zerver/views/events_register.py` and `zerver/lib/events.py`):
+
+<Steps>
+  <Step title="Create Event Queue">
+    Django makes HTTP request to Tornado to create a new event queue and records its `queue_id`.
+  </Step>
+  
+  <Step title="Fetch Initial State">
+    Django queries databases/caches to fetch data (via `fetch_initial_state_data`).
+  </Step>
+  
+  <Step title="Get Events Since Queue Creation">
+    Django requests any events added to the Tornado queue since it was created.
+  </Step>
+  
+  <Step title="Apply Events to State">
+    Django "applies" these events to the initial state using `apply_events` (e.g., updating user data for name changes).
+  </Step>
+</Steps>
+
+This ensures clients receive a consistent snapshot of state plus all relevant updates.
+
+## Testing Event System
+
+The `apply_events` function is critical but difficult to test manually since it handles race conditions. Zulip has extensive automated tests in `zerver/tests/test_events.py`.
+
+### Example Test
+
+```python
+def test_default_streams_events(self) -> None:
+    stream = get_stream("Scotland", self.user_profile.realm)
+    events = self.verify_action(lambda: do_add_default_stream(stream))
+    check_default_streams("events[0]", events[0])
+```
+
+The `verify_action` helper:
+
+1. Fetches initial state
+2. Calls the action function
+3. Captures generated events
+4. Applies events to initial state ("hybrid state")
+5. Fetches fresh state ("normal state")
+6. Compares hybrid state vs. normal state
+
+If states match, the `apply_events` logic is correct.
+
+## Performance Characteristics
+
+The event queue system is high-traffic:
+
+- Processes at minimum one request per message per client
+- Sends heartbeats every ~45s to all queues
+- GC scan takes ~2ms with 1000 event queues
+- Efficiently handles thousands of concurrent connections
+
+## Schema Changes
+
+When changing event formats:
+
+- **Adding fields/types**: Document in API docs, bump `API_FEATURE_LEVEL`
+- **Changing fields**: Use `client_capabilities` flags for backwards compatibility
+- **Tornado data changes**: Add translation logic in `event_queue.py`'s `from_dict` function
+
+<Note>
+Compatibility code should be marked with `# TODO/compatibility:` comments noting when it can be removed.
+</Note>
+
+## Related Documentation
+
+- [New Feature Tutorial](/development/tutorials/new-feature) - Complete walkthrough using the events system
+- [Architecture Overview](/overview/architecture) - High-level system design
+- [Notifications System](/subsystems/notifications) - How notifications integrate with event queues
+
+## Key Files
+
+- `zerver/tornado/event_queue.py` - Main event queue implementation (~2000 lines)
+- `zerver/lib/events.py` - State fetching and event application
+- `zerver/views/events_register.py` - Registration endpoint
+- `zerver/tests/test_events.py` - Comprehensive event system tests

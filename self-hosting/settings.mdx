@@ -1,0 +1,285 @@
+---
+title: Server Settings
+description: Configure your Zulip server settings and options
+---
+
+This page explains the configuration options in `/etc/zulip/settings.py`, the main configuration file used by system administrators to configure their Zulip server.
+
+<Note>
+[Organization administrators](https://zulip.com/help/user-roles) can configure many options for a Zulip organization from the web or desktop app. This page focuses on server-level configuration.
+</Note>
+
+## Configuration file location
+
+Zulip's server configuration is stored in:
+
+- `/etc/zulip/settings.py` - Main server settings
+- `/etc/zulip/zulip-secrets.conf` - Secrets like passwords and API keys
+- `/etc/zulip/zulip.conf` - System and deployment configuration
+
+## Important settings
+
+### Required settings
+
+These settings are configured during installation:
+
+**`EXTERNAL_HOST`**
+
+The user-accessible domain name for your Zulip server (e.g., `zulip.example.com`). This is what users type in their browser.
+
+```python
+EXTERNAL_HOST = 'zulip.example.com'
+```
+
+**`ZULIP_ADMINISTRATOR`**
+
+The email address of the server administrator. This appears as the contact email in automated emails, help pages, and error pages.
+
+```python
+ZULIP_ADMINISTRATOR = 'admin@example.com'
+```
+
+### Authentication methods
+
+Configure which authentication methods are available. See [Authentication Methods](/self-hosting/authentication) for detailed configuration.
+
+```python
+AUTHENTICATION_BACKENDS = (
+    'zproject.backends.EmailAuthBackend',  # Email/password
+    'zproject.backends.GitHubAuthBackend',  # GitHub
+    'zproject.backends.GoogleAuthBackend',  # Google
+)
+```
+
+### Email configuration
+
+Configure outgoing email (SMTP) settings. See [Email Configuration](/self-hosting/email) for details.
+
+```python
+EMAIL_HOST = 'smtp.example.com'
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'username@example.com'
+EMAIL_USE_TLS = True
+```
+
+The email password is stored in `/etc/zulip/zulip-secrets.conf`:
+
+```ini
+email_password = your_password_here
+```
+
+### Upload backends
+
+Configure where uploaded files are stored:
+
+```python
+# Local file storage (default)
+LOCAL_UPLOADS_DIR = '/home/zulip/uploads'
+
+# S3 storage (recommended for scale)
+S3_AUTH_UPLOADS_BUCKET = 'your-bucket-name'
+S3_REGION = 'us-east-1'
+```
+
+See [upload backends documentation](https://zulip.readthedocs.io/en/stable/production/upload-backends.html) for S3 configuration.
+
+## Applying configuration changes
+
+After modifying `/etc/zulip/settings.py`, restart the Zulip server:
+
+```bash
+su zulip -c '/home/zulip/deployments/current/scripts/restart-server'
+```
+
+<Warning>
+Always restart the server after changing settings for changes to take effect.
+</Warning>
+
+## Advanced settings
+
+### Navigation tour video
+
+Customize or disable the new user onboarding video:
+
+```python
+# Use your own video
+NAVIGATION_TOUR_VIDEO_URL = 'https://yourserver.example.com/path/to/video.mp4'
+
+# Disable the navigation tour
+NAVIGATION_TOUR_VIDEO_URL = None
+```
+
+### Terms of Service and Privacy Policy
+
+Provide custom policy documents for your organization:
+
+<Steps>
+  <Step title="Create policies directory">
+    ```bash
+    mkdir -p /etc/zulip/policies
+    ```
+  </Step>
+
+  <Step title="Add policy files">
+    Create Markdown files:
+    - `/etc/zulip/policies/terms.md` - Terms of Service
+    - `/etc/zulip/policies/privacy.md` - Privacy Policy
+    - `/etc/zulip/policies/sidebar_index.md` - Navigation (optional)
+  </Step>
+
+  <Step title="Enable in settings">
+    Edit `/etc/zulip/settings.py`:
+
+    ```python
+    POLICIES_DIRECTORY = '/etc/zulip/policies'
+    TERMS_OF_SERVICE_VERSION = '1.0'
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+Make sure your organization name appears prominently in all policy documents to avoid confusion with Zulip Cloud policies.
+</Warning>
+
+### Video and voice calls
+
+Configure video call providers. See [Video Calls](/self-hosting/video-calls) for detailed setup.
+
+```python
+# Jitsi Meet (default)
+VIDEO_CHAT_PROVIDER = 'jitsi_meet'
+
+# Zoom
+VIDEO_ZOOM_CLIENT_ID = 'your-client-id'
+
+# BigBlueButton
+BIG_BLUE_BUTTON_URL = 'https://bbb.example.com/bigbluebutton/'
+```
+
+### Mobile push notifications
+
+Enable the mobile push notification service:
+
+```python
+ZULIP_SERVICE_PUSH_NOTIFICATIONS = True
+ZULIP_SERVICE_SUBMIT_USAGE_STATISTICS = True  # Optional
+```
+
+See [Mobile Push Notifications](/self-hosting/mobile-push-notifications) for complete setup instructions.
+
+## System configuration
+
+Advanced system settings are in `/etc/zulip/zulip.conf`:
+
+```ini
+[machine]
+puppet_classes = zulip::profile::standalone
+
+[postgresql]
+version = 16
+
+[application_server]
+nginx_listen_port = 443
+
+[http_proxy]
+host = 127.0.0.1
+port = 4750
+```
+
+See [system configuration documentation](https://zulip.readthedocs.io/en/stable/production/system-configuration.html) for all available options.
+
+## Settings template
+
+Zulip's complete settings template with documentation is available at:
+
+```bash
+/home/zulip/deployments/current/zproject/prod_settings_template.py
+```
+
+Or view it online: [prod_settings_template.py](https://github.com/zulip/zulip/blob/main/zproject/prod_settings_template.py)
+
+This file contains over 100 documented settings covering:
+
+- Authentication and security
+- Email and notifications  
+- File uploads and storage
+- Integrations and bots
+- Performance and caching
+- Organization defaults
+- And much more
+
+## Updating settings documentation
+
+After upgrading Zulip across major versions, compare your settings file to the latest template:
+
+```bash
+/home/zulip/deployments/current/scripts/setup/compare-settings-to-template
+```
+
+This shows modifications you've made and helps identify new settings.
+
+See [updating settings.py inline documentation](https://zulip.readthedocs.io/en/stable/production/upgrade.html#updating-settingspy-inline-documentation) for detailed instructions.
+
+## Common configuration tasks
+
+### Change server hostname
+
+1. Update DNS to point new hostname to server
+2. Update SSL certificates for new hostname
+3. Edit `/etc/zulip/settings.py`:
+   ```python
+   EXTERNAL_HOST = 'new.example.com'
+   ```
+4. Restart server:
+   ```bash
+   /home/zulip/deployments/current/scripts/restart-server
+   ```
+
+### Configure rate limiting
+
+Adjust API rate limits:
+
+```python
+RATE_LIMITING = True
+RATE_LIMITING_RULES = {
+    'api_by_user': [
+        (60, 200),  # 200 requests per minute
+    ],
+}
+```
+
+### Enable development features
+
+<Warning>
+Development features should not be enabled in production.
+</Warning>
+
+```python
+DEVELOPMENT = False  # Always False in production
+```
+
+## Getting help
+
+If you have questions about configuring your Zulip server:
+
+- Read the inline documentation in `/etc/zulip/settings.py`
+- Check the [settings template](https://github.com/zulip/zulip/blob/main/zproject/prod_settings_template.py)
+- Visit the [Zulip development community](https://zulip.com/development-community/) for support
+- Contact [sales@zulip.com](mailto:sales@zulip.com) for paid support options
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Email Setup" icon="envelope" href="/self-hosting/email">
+    Configure outgoing email
+  </Card>
+  <Card title="Authentication" icon="key" href="/self-hosting/authentication">
+    Set up authentication methods
+  </Card>
+  <Card title="SSL Certificates" icon="lock" href="/self-hosting/ssl-certificates">
+    Configure HTTPS certificates
+  </Card>
+  <Card title="Video Calls" icon="video" href="/self-hosting/video-calls">
+    Enable video calling
+  </Card>
+</CardGroup>

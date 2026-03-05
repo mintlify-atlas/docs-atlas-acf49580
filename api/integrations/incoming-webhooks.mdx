@@ -1,0 +1,298 @@
+---
+title: 'Incoming Webhooks'
+description: 'Receive notifications from external services in Zulip'
+---
+
+## Overview
+
+Incoming webhooks allow external services to send notifications and data into Zulip. This is the easiest way to get automated updates from external tools into your Zulip channels.
+
+## How It Works
+
+1. External service (e.g., GitHub, CI/CD) generates an event
+2. Service sends HTTP POST to Zulip webhook URL
+3. Zulip processes the payload and posts a formatted message
+4. Message appears in designated channel and topic
+
+## Built-in Webhook Integrations
+
+Zulip provides 100+ native webhook integrations:
+
+### Development
+- **GitHub** - Pull requests, issues, commits
+- **GitLab** - Merge requests, pipelines, issues
+- **Bitbucket** - Repository events
+- **Jira** - Issue updates and comments
+
+### CI/CD
+- **Jenkins** - Build status
+- **CircleCI** - Build notifications
+- **Travis CI** - Test results
+- **GitHub Actions** - Workflow runs
+
+### Monitoring
+- **Datadog** - Alerts and monitors
+- **Sentry** - Error tracking
+- **PagerDuty** - Incident management
+- **Prometheus** - Alertmanager integration
+
+### Project Management
+- **Asana** - Task updates
+- **Trello** - Card changes
+- **Linear** - Issue tracking
+
+## Setting Up a Webhook
+
+<Steps>
+  <Step title="Create Integration">
+    In Zulip, go to **Settings** → **Integrations** and select your service (e.g., "GitHub").
+  </Step>
+  
+  <Step title="Get Webhook URL">
+    Zulip generates a unique webhook URL:
+    
+    ```
+    https://your-domain.zulipchat.com/api/v1/external/github?api_key=abcd1234&stream=engineering
+    ```
+  </Step>
+  
+  <Step title="Configure External Service">
+    In the external service (e.g., GitHub repository settings), add the webhook URL.
+  </Step>
+  
+  <Step title="Test the Integration">
+    Trigger a test event to verify messages appear in Zulip.
+  </Step>
+</Steps>
+
+## Example: GitHub Webhook
+
+### In Zulip
+
+1. Go to **Settings** → **Integrations** → **GitHub**
+2. Choose your channel (e.g., `engineering`)
+3. Copy the webhook URL
+
+### In GitHub
+
+1. Go to repository **Settings** → **Webhooks** → **Add webhook**
+2. Paste the Zulip webhook URL
+3. Select events: Pull requests, Issues, Push
+4. Save webhook
+
+### Result
+
+When someone opens a pull request:
+
+```markdown
+**alice** opened PR #123: Add new feature
+
+> This PR adds support for...
+
+[View on GitHub](https://github.com/org/repo/pull/123)
+```
+
+## Custom Webhook URLs
+
+Webhook URLs follow this pattern:
+
+```
+https://{domain}/api/v1/external/{integration}?api_key={key}&stream={channel}
+```
+
+**Parameters:**
+- `integration` - The webhook type (github, jira, etc.)
+- `api_key` - Bot API key
+- `stream` - Channel name to post to
+- `topic` (optional) - Custom topic name
+
+## Generic Webhook Integration
+
+For services without native integration, use the generic webhook:
+
+```bash
+curl -X POST https://your-domain.zulipchat.com/api/v1/messages \
+  -u bot@example.com:API_KEY \
+  -d "type=stream" \
+  -d "to=notifications" \
+  -d "topic=Custom Webhook" \
+  -d "content=Event triggered: ${EVENT_NAME}"
+```
+
+## Creating Custom Webhook Integrations
+
+You can write custom webhook integrations for Zulip:
+
+```python Custom Webhook Handler
+# webhooks/myservice/view.py
+from zerver.decorator import webhook_view
+from zerver.lib.response import json_success
+from zerver.lib.webhooks.common import check_send_webhook_message
+from django.http import HttpRequest, HttpResponse
+
+@webhook_view("MyService")
+def api_myservice_webhook(request: HttpRequest, user_profile) -> HttpResponse:
+    payload = request.json()
+    
+    # Extract data from payload
+    event_type = payload.get('event')
+    message = payload.get('message')
+    
+    # Format message
+    topic = f"MyService: {event_type}"
+    body = f"**{event_type}**\n\n{message}"
+    
+    # Send to Zulip
+    check_send_webhook_message(request, user_profile, topic, body)
+    
+    return json_success(request)
+```
+
+<Info>
+  See the [webhook development guide](https://zulip.readthedocs.io/en/latest/webhooks/incoming-webhooks-overview.html) for details.
+</Info>
+
+## Webhook Security
+
+<AccordionGroup>
+  <Accordion title="API Key Protection">
+    Webhook URLs contain API keys. Keep them secure:
+    
+    - Don't commit webhook URLs to public repositories
+    - Use separate bot accounts for webhooks
+    - Rotate API keys if compromised
+    - Use HTTPS only
+  </Accordion>
+  
+  <Accordion title="Webhook Validation">
+    Some integrations support signature validation:
+    
+    - GitHub: Validates `X-Hub-Signature`
+    - GitLab: Validates secret tokens
+    - Slack: Validates request signatures
+    
+    Enable validation when available for additional security.
+  </Accordion>
+  
+  <Accordion title="IP Whitelisting">
+    For self-hosted installations, consider IP whitelisting:
+    
+    - Restrict webhook endpoints to known service IPs
+    - Use firewall rules or reverse proxy configuration
+  </Accordion>
+</AccordionGroup>
+
+## Message Formatting
+
+Webhook messages support full Markdown:
+
+```markdown
+**Bold text** for emphasis
+*Italic text* for subtle emphasis
+
+[Links](https://example.com)
+
+- Bullet lists
+- For structured data
+
+```code blocks```
+For code snippets
+
+Emoji reactions: :tada: :rocket: :check:
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Messages Not Appearing">
+    - Verify webhook URL is correct
+    - Check bot has permission to post to channel
+    - Look for errors in external service webhook logs
+    - Test with a simple curl command
+  </Accordion>
+  
+  <Accordion title="Wrong Channel or Topic">
+    - Check `stream` parameter in webhook URL
+    - Some integrations allow topic customization
+    - Update webhook URL in external service
+  </Accordion>
+  
+  <Accordion title="Malformed Messages">
+    - External service changed payload format
+    - Custom webhook code needs updating
+    - Check Zulip server logs for parsing errors
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Check>
+  **Dedicated channels** - Create separate channels for different integration types
+</Check>
+
+<Check>
+  **Bot accounts** - Use bot accounts, not personal accounts, for webhooks
+</Check>
+
+<Check>
+  **Meaningful topics** - Configure topics to make notifications easy to navigate
+</Check>
+
+<Check>
+  **Filter noise** - Only subscribe to relevant events in external services
+</Check>
+
+<Warning>
+  High-volume webhooks can be noisy. Consider muting channels and using mobile notifications selectively.
+</Warning>
+
+## Examples by Use Case
+
+### Development Workflow
+
+```
+Channel: #engineering
+Topics: 
+  - "Pull Requests" (GitHub PRs)
+  - "CI/CD" (Build status)
+  - "Issues" (Bug reports)
+  - "Deployments" (Release notifications)
+```
+
+### Operations
+
+```
+Channel: #alerts
+Topics:
+  - "Production" (Datadog alerts)
+  - "Staging" (Test environment)
+  - "Incidents" (PagerDuty)
+  - "Performance" (New Relic)
+```
+
+### Project Management
+
+```
+Channel: #project-alpha
+Topics:
+  - "Tasks" (Asana updates)
+  - "Milestones" (Progress tracking)
+  - "Discussions" (Comments)
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Outgoing Webhooks" icon="arrow-up-right" href="/api/integrations/outgoing-webhooks">
+    Send Zulip events externally
+  </Card>
+  <Card title="Bots" icon="robot" href="/api/integrations/bots">
+    Build interactive bots
+  </Card>
+  <Card title="Send Messages" icon="paper-plane" href="/api/messages/send">
+    Directly send messages via API
+  </Card>
+  <Card title="Integration Directory" icon="grid" href="/integrations">
+    Browse all integrations
+  </Card>
+</CardGroup>

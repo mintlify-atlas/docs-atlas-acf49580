@@ -1,0 +1,89 @@
+---
+title: 'Create a User'
+description: 'POST /api/v1/users - Create a new user account'
+---
+
+## Endpoint
+
+```
+POST /api/v1/users
+```
+
+Create a new user account via the API.
+
+<Warning>
+  This endpoint requires the `can_create_users` permission. On Zulip Cloud, this is available only for organizations on paid plans.
+</Warning>
+
+## Request Parameters
+
+<ParamField body="email" type="string" required>
+  The email address of the new user.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The password for the new user.
+</ParamField>
+
+<ParamField body="full_name" type="string" required>
+  The full name of the new user.
+</ParamField>
+
+## Response
+
+<ResponseField name="user_id" type="integer">
+  The ID of the newly created user.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://your-domain.zulipchat.com/api/v1/users \
+  -u email@example.com:API_KEY \
+  -d 'email=newuser@example.com' \
+  -d 'password=secure_password' \
+  -d 'full_name=New User'
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+result = client.create_user({
+    "email": "newuser@example.com",
+    "password": "secure_password",
+    "full_name": "New User"
+})
+
+print(f"Created user with ID: {result['user_id']}")
+```
+
+</CodeGroup>
+
+## Response Example
+
+<ResponseExample>
+
+```json Success
+{
+  "result": "success",
+  "msg": "",
+  "user_id": 42
+}
+```
+
+</ResponseExample>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Users" icon="users" href="/api/users/list">
+    Get all users
+  </Card>
+  <Card title="Update User" icon="pen" href="/api/users/update">
+    Modify user details
+  </Card>
+</CardGroup>

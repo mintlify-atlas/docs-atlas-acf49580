@@ -1,0 +1,272 @@
+---
+title: 'Delete a Message'
+description: 'DELETE /api/v1/messages/{message_id} - Permanently delete a message'
+---
+
+## Endpoint
+
+```
+DELETE /api/v1/messages/{message_id}
+```
+
+Permanently delete a message from Zulip.
+
+<Warning>
+  Message deletion is permanent and cannot be undone. The message content is removed from the database.
+</Warning>
+
+## Path Parameters
+
+<ParamField path="message_id" type="integer" required>
+  The ID of the message to delete.
+</ParamField>
+
+## Response
+
+<ResponseField name="result" type="string">
+  `"success"` if the deletion was successful.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X DELETE https://your-domain.zulipchat.com/api/v1/messages/123 \
+  -u email@example.com:API_KEY
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Delete a message
+result = client.delete_message(123)
+
+print(result)
+# {'result': 'success', 'msg': ''}
+
+# Delete multiple messages
+message_ids = [123, 124, 125]
+for msg_id in message_ids:
+    result = client.delete_message(msg_id)
+    if result['result'] == 'success':
+        print(f"Deleted message {msg_id}")
+    else:
+        print(f"Failed to delete {msg_id}: {result['msg']}")
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Delete a message
+const result = await client.messages.deleteById({
+  message_id: 123
+});
+
+console.log(result);
+// { result: 'success', msg: '' }
+```
+
+</CodeGroup>
+
+## Response Examples
+
+<ResponseExample>
+
+```json Success Response
+{
+  "result": "success",
+  "msg": ""
+}
+```
+
+```json Error - Message Not Found
+{
+  "result": "error",
+  "msg": "Invalid message(s)",
+  "code": "BAD_REQUEST"
+}
+```
+
+```json Error - Permission Denied
+{
+  "result": "error",
+  "msg": "You don't have permission to delete this message",
+  "code": "BAD_REQUEST"
+}
+```
+
+```json Error - Time Limit Exceeded
+{
+  "result": "error",
+  "msg": "The time limit for deleting this message has passed",
+  "code": "BAD_REQUEST"
+}
+```
+
+</ResponseExample>
+
+## Permissions
+
+Users can delete messages under these conditions:
+
+### Delete Own Messages
+
+Message senders can delete their own messages if:
+
+- They belong to `can_delete_own_message_group`
+- Organization allows message deletion
+- Within configured time limits (if applicable)
+- Message hasn't been sent too long ago
+
+### Delete Any Message
+
+Users with special permissions can delete any message:
+
+- Members of `can_delete_any_message_group`
+- Organization administrators
+- Moderators (with appropriate permissions)
+
+### Time Limits
+
+Organizations can configure time limits for message deletion:
+
+- `delete_own_message_limit_seconds` - How long users can delete their own messages
+- Set to `null` for no limit
+- Administrators and moderators bypass time limits
+
+<Info>
+  Organization settings control who can delete messages and when. Check your organization's [message deletion policy](/help/restrict-message-editing-and-deletion).
+</Info>
+
+## What Gets Deleted
+
+When a message is deleted:
+
+- **Message content** is permanently removed
+- **Reactions** are deleted
+- **Attachments** are not automatically deleted (remain on server)
+- **Edit history** is removed
+- **Notifications** about the deletion are sent to relevant users
+- **Tombstone** message appears in UI indicating deletion
+
+## Bulk Deletion
+
+To delete multiple messages, call the endpoint multiple times:
+
+```python Bulk Deletion Example
+def delete_messages_in_topic(client, stream_name, topic_name):
+    # First, get all messages in the topic
+    messages = client.get_messages({
+        "anchor": "newest",
+        "num_before": 1000,
+        "num_after": 0,
+        "narrow": [
+            {"operator": "channel", "operand": stream_name},
+            {"operator": "topic", "operand": topic_name}
+        ]
+    })
+    
+    # Delete each message
+    deleted_count = 0
+    for msg in messages['messages']:
+        result = client.delete_message(msg['id'])
+        if result['result'] == 'success':
+            deleted_count += 1
+    
+    print(f"Deleted {deleted_count} messages")
+    return deleted_count
+```
+
+<Warning>
+  Be cautious with bulk deletion scripts. Deleted messages cannot be recovered.
+</Warning>
+
+## Alternatives to Deletion
+
+Consider these alternatives before deleting messages:
+
+<AccordionGroup>
+  <Accordion title="Edit the Message">
+    Update message content instead of deleting. Preserves conversation context while correcting mistakes.
+    
+    ```python
+    client.update_message({
+        "message_id": 123,
+        "content": "[This message was redacted]"
+    })
+    ```
+  </Accordion>
+  
+  <Accordion title="Move to Different Topic">
+    Move off-topic messages to a more appropriate topic/channel.
+    
+    ```python
+    client.update_message({
+        "message_id": 123,
+        "topic": "Off-topic",
+        "propagate_mode": "change_one"
+    })
+    ```
+  </Accordion>
+  
+  <Accordion title="Archive the Channel">
+    For cleaning up old channels, archive them instead of deleting messages.
+  </Accordion>
+</AccordionGroup>
+
+## Audit and Compliance
+
+For organizations with compliance requirements:
+
+- Deleted messages may still exist in backups
+- Audit logs track who deleted what and when
+- Some jurisdictions require message retention
+- Configure [message retention policies](/help/message-retention-policy) appropriately
+
+<Info>
+  Self-hosted installations can configure data retention policies that override deletion for compliance.
+</Info>
+
+## Rate Limiting
+
+The delete endpoint is rate limited to prevent abuse:
+
+- Limits vary by organization and user role
+- Bulk deletion may hit rate limits
+- Add delays between deletions if processing many messages
+
+```python Rate-Limited Deletion
+import time
+
+for msg_id in message_ids:
+    result = client.delete_message(msg_id)
+    time.sleep(0.1)  # Small delay to avoid rate limits
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Update Message" icon="pen" href="/api/messages/update">
+    Edit message content or topic
+  </Card>
+  <Card title="Get Messages" icon="inbox" href="/api/messages/get">
+    Retrieve messages before deleting
+  </Card>
+  <Card title="Send Message" icon="paper-plane" href="/api/messages/send">
+    Send a new message
+  </Card>
+  <Card title="Message Flags" icon="flag" href="/api/messages/flags">
+    Mark messages as read/starred
+  </Card>
+</CardGroup>

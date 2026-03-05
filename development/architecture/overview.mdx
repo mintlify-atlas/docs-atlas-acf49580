@@ -1,0 +1,393 @@
+---
+title: Architecture Overview
+description: Understanding Zulip's high-level architecture and key components
+---
+
+Zulip is a powerful real-time chat application built with Django and Tornado, designed to handle everything from small teams to organizations with tens of thousands of users.
+
+## Key Repositories
+
+<CardGroup cols={2}>
+  <Card title="Main Server & Web App" icon="github" href="https://github.com/zulip/zulip">
+    Python/Django backend and JavaScript/TypeScript web frontend
+  </Card>
+  <Card title="Flutter Mobile App" icon="mobile" href="https://github.com/zulip/zulip-flutter">
+    Official iOS and Android mobile clients
+  </Card>
+  <Card title="Desktop App" icon="desktop" href="https://github.com/zulip/zulip-desktop">
+    Cross-platform desktop client for macOS, Linux, and Windows
+  </Card>
+  <Card title="Terminal Client" icon="terminal" href="https://github.com/zulip/zulip-terminal">
+    Text-based client for terminal enthusiasts
+  </Card>
+</CardGroup>
+
+## Core Concepts
+
+### Realms (Organizations)
+
+A Zulip server can host multiple **realms** (organizations), each on its own subdomain. Each realm is a private space with:
+
+- Its own users and permissions
+- Separate channels and message history
+- Independent customizations and settings
+- Isolated data and administration
+
+One person can be a user of multiple Zulip realms. Some installations like zulip.com host thousands of realms.
+
+### Channels and Topics
+
+Zulip's unique threading model uses:
+
+- **Channels** (formerly called streams) - Group conversations by team, project, or topic
+- **Topics** - Individual conversation threads within channels
+- **Direct messages** - Private conversations between specific users
+
+This structure enables efficient, organized communication at scale.
+
+## Architecture Diagram
+
+```
+                    ┌──────────────────────┐
+                    │   Client (Browser)    │
+                    │   JavaScript/TypeScript │
+                    └─────────┬────────────┘
+                             │
+                             │ HTTP/HTTPS
+                             │
+                    ┌────────┴─────────┐
+                    │      nginx          │
+                    │  (Reverse Proxy)   │
+                    └───┬─────────┬──────┘
+                        │            │
+        ┌───────────┼───────────┼──────────┐
+        │            │            │           │
+   ┌────┴────┐  ┌────┴────┐  ┌────┴────┐  │
+   │  Django │  │ Tornado │  │ Static  │  │
+   │ (uWSGI) │  │ (Events) │  │ Assets  │  │
+   └────┬────┘  └────┬────┘  └─────────┘  │
+        │            │                      │
+        │            │                      │
+   ┌────┴────────────┴─────────────────────┴──┐
+   │                                              │
+   │            Background Services               │
+   │                                              │
+   │  ┌────────────┐  ┌────────────┐  │
+   │  │ PostgreSQL │  │  RabbitMQ  │  │
+   │  └────────────┘  └────────────┘  │
+   │  ┌────────────┐  ┌────────────┐  │
+   │  │ memcached  │  │   Redis    │  │
+   │  └────────────┘  └────────────┘  │
+   └──────────────────────────────────────────────┘
+```
+
+## Key Components
+
+### Django Application Server
+
+The main web application server, built with [Django](https://www.djangoproject.com/).
+
+**Responsibilities:**
+- Handle HTTP requests
+- Serve the web application
+- Process API calls
+- Execute business logic
+- Interact with the database
+- Generate HTML pages
+
+**Location:** `zerver/` directory
+
+**Key files:**
+- `zerver/views/` - API endpoints and views
+- `zerver/models/` - Database models
+- `zerver/actions/` - Business logic and state changes
+- `zerver/lib/` - Utility libraries
+
+### Tornado Event Server
+
+An asynchronous server for real-time push, built with [Tornado](https://www.tornadoweb.org).
+
+**Responsibilities:**
+- Hold tens of thousands of long-polling connections
+- Deliver events to connected clients
+- Maintain event queues for each client
+- Handle `/json/events` endpoint
+
+**Location:** `zerver/tornado/` directory
+
+Tornado is single-threaded and asynchronous, making it ideal for holding many open connections without blocking. We avoid doing database or cache queries in Tornado to maintain performance.
+
+See [Real-time Events](/development/architecture/realtime-events) for details.
+
+### nginx (Reverse Proxy)
+
+nginx sits in front of all Zulip traffic.
+
+**Responsibilities:**
+- Serve static assets (CSS, JavaScript, images)
+- Route requests to Django or Tornado
+- Handle SSL/TLS termination
+- Serve uploaded files (avatars, attachments)
+
+**Configuration:** `puppet/zulip/files/nginx/` and `puppet/zulip/templates/nginx/`
+
+**Routing rules:**
+- `/static/*` → Static files from `prod-static/` (or Git repo in development)
+- `/json/events` and `/api/v1/events` → Tornado server
+- All other paths → Django via uWSGI
+- User uploads → Local filesystem or S3
+
+<Note>
+In development, we use a simple Tornado-based proxy instead of nginx.
+</Note>
+
+### PostgreSQL Database
+
+[PostgreSQL](https://www.postgresql.org/) stores all persistent data.
+
+**What's stored:**
+- User accounts and profiles
+- Messages and message history
+- Channels and subscriptions
+- Organization settings
+- Attachments metadata
+- Analytics data
+
+**Models:** Defined in `zerver/models/`
+
+Zulip makes heavy use of PostgreSQL-specific features like:
+
+- Full-text search with GIN indexes
+- `tsrange` for time-based queries
+- JSONB for flexible data storage
+- Efficient array operations
+
+### RabbitMQ (Message Queue)
+
+[RabbitMQ](https://www.rabbitmq.com/) handles asynchronous task processing.
+
+**Queues:**
+- `notify_tornado` - Events to deliver to clients
+- `email_senders` - Outgoing emails
+- `digest_emails` - Digest email generation
+- `missedmessage_emails` - Missed message notifications
+- `missedmessage_mobile_notifications` - Push notifications
+- And more...
+
+**Why queues?**
+
+Many tasks are best run in the background because they're expensive or don't need to be synchronous:
+
+- Sending emails
+- Processing analytics
+- Delivering push notifications
+- Updating search indexes
+
+**Location:** `zerver/worker/` contains queue consumers
+
+### memcached (Cache)
+
+[memcached](https://memcached.org/) provides fast in-memory caching.
+
+**What's cached:**
+- Database model objects (users, realms, streams)
+- Rendered markdown
+- API rate limiting data
+- Session data
+
+**Benefits:**
+- Dramatically reduces database load
+- Sub-millisecond access times
+- Automatic expiration of old data
+
+**Implementation:** `zerver/lib/cache.py` and `zerver/lib/cache_helpers.py`
+
+See the [caching guide](/development/caching) for details.
+
+### Redis (Data Store)
+
+[Redis](https://redis.io/) is used for short-term data stores.
+
+**Primary use cases:**
+- Rate limiting
+- Transient state
+- Real-time presence data
+
+**Configuration:** `puppet/zulip/templates/zulip-redis.template.erb`
+
+Redis is configured with persistence disabled for performance:
+
+```
+# Disable saving to disk
+save ""
+```
+
+### Supervisor (Process Management)
+
+[Supervisor](http://supervisord.org/) manages server processes.
+
+**Responsibilities:**
+- Start server processes on boot
+- Restart crashed processes automatically
+- Direct logging output
+- Provide process control interface
+
+**Configuration:** `puppet/zulip/templates/supervisor/zulip.conf.template.erb`
+
+**Managed processes:**
+- Django app server
+- Tornado event server
+- Queue workers (multiple)
+- Thumbnail processor
+- And more...
+
+## Frontend Architecture
+
+The Zulip web frontend is built with:
+
+- **JavaScript and TypeScript** - Located in `web/src/`
+- **Handlebars templates** - Located in `web/templates/`
+- **Jinja2 templates** - Located in `templates/zerver/`
+- **CSS** - Located in `web/styles/`
+
+**Build process:**
+
+- **webpack** bundles JavaScript/TypeScript
+- **Babel** transpiles modern JavaScript
+- **Handlebars** precompiles templates
+- **PostCSS** processes CSS
+
+See [Frontend Architecture](/development/architecture/frontend) for details.
+
+## Request Flow
+
+Typical request flow for sending a message:
+
+<Steps>
+  <Step title="User submits message">
+    JavaScript in browser sends POST request to `/json/messages`
+  </Step>
+  
+  <Step title="nginx routes to Django">
+    nginx receives request and forwards to Django via uWSGI
+  </Step>
+  
+  <Step title="Django processes request">
+    - View in `zerver/views/messages.py` validates input
+    - Action in `zerver/actions/message_send.py` handles business logic
+    - Message saved to PostgreSQL
+    - Event generated and sent to RabbitMQ `notify_tornado` queue
+  </Step>
+  
+  <Step title="Queue worker processes event">
+    - Worker reads from `notify_tornado` queue
+    - Determines which users should receive the event
+    - Pushes event to Tornado event queues
+  </Step>
+  
+  <Step title="Tornado delivers to clients">
+    - Tornado delivers event to all connected clients via long-polling
+    - Clients update UI to show new message
+  </Step>
+  
+  <Step title="Django returns response">
+    Original request returns success to sender's client
+  </Step>
+</Steps>
+
+## Development vs. Production
+
+### Development Environment
+
+- **Web server:** Tornado-based proxy (not nginx)
+- **Django:** `manage.py runserver` with auto-reload
+- **Frontend:** webpack dev server with hot module replacement
+- **Services:** Run via `./tools/run-dev`
+
+### Production Environment
+
+- **Web server:** nginx
+- **Django:** uWSGI application server
+- **Frontend:** Minified, bundled assets in `prod-static/`
+- **Services:** Managed by Supervisor
+- **Deployment:** Via release tarballs
+
+## Data Flow Patterns
+
+### Synchronous Operations
+
+Used for operations that must complete immediately:
+
+1. Client sends request
+2. Server processes and commits to database
+3. Server returns response
+4. Client updates UI
+
+Examples: Viewing messages, updating settings
+
+### Asynchronous Operations
+
+Used for expensive operations that can happen in the background:
+
+1. Client sends request
+2. Server queues task in RabbitMQ
+3. Server returns success immediately
+4. Background worker processes task
+
+Examples: Sending emails, processing webhooks, generating analytics
+
+### Real-time Sync
+
+Used for changes that need to appear in all connected clients:
+
+1. Client A sends request (e.g., send message)
+2. Server processes and commits to database
+3. Server sends event to all relevant clients via Tornado
+4. All clients (including A, B, C) receive event and update UI
+5. Server returns response to Client A
+
+Examples: Messages, reactions, typing indicators, user presence
+
+## Code Organization
+
+### Backend (`zerver/`)
+
+```
+zerver/
+  ├── actions/        # Business logic, state changes
+  ├── lib/           # Utility libraries
+  ├── models/        # Database models
+  ├── tests/         # Backend tests
+  ├── tornado/       # Tornado event server
+  ├── views/         # API endpoints and views
+  ├── webhooks/      # Webhook integrations
+  └── worker/        # Queue workers
+```
+
+### Frontend (`web/`)
+
+```
+web/
+  ├── src/           # JavaScript/TypeScript source
+  ├── templates/     # Handlebars templates
+  ├── styles/        # CSS files
+  ├── tests/         # Frontend unit tests
+  └── e2e-tests/     # End-to-end tests
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Django App Structure" icon="python" href="/development/architecture/django-app">
+    Deep dive into the Django application
+  </Card>
+  <Card title="Frontend Architecture" icon="browser" href="/development/architecture/frontend">
+    Understand the web frontend
+  </Card>
+  <Card title="Real-time Events" icon="bolt" href="/development/architecture/realtime-events">
+    Learn how the event system works
+  </Card>
+  <Card title="Markdown Processing" icon="markdown" href="/development/architecture/markdown">
+    Explore Zulip's markdown engine
+  </Card>
+</CardGroup>

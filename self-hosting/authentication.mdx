@@ -1,0 +1,421 @@
+---
+title: Authentication Methods
+description: Configure authentication backends for your Zulip server
+---
+
+Zulip supports a wide variety of authentication methods to integrate with your organization's identity management system.
+
+## Supported authentication methods
+
+<CardGroup cols={2}>
+  <Card title="Email and Password" icon="envelope">
+    Built-in authentication with secure password storage using Argon2
+  </Card>
+  <Card title="Google" icon="google">
+    OAuth authentication via Google accounts
+  </Card>
+  <Card title="GitHub" icon="github">
+    OAuth authentication via GitHub accounts
+  </Card>
+  <Card title="GitLab" icon="gitlab">
+    OAuth authentication via GitLab accounts
+  </Card>
+  <Card title="Microsoft Entra ID" icon="microsoft">
+    OAuth authentication via Microsoft (formerly AzureAD)
+  </Card>
+  <Card title="LDAP / Active Directory" icon="users-rectangle">
+    Enterprise directory integration with synchronization
+  </Card>
+  <Card title="SAML" icon="shield-check">
+    Enterprise SSO via Okta, OneLogin, and other providers
+  </Card>
+  <Card title="OpenID Connect" icon="id-badge">
+    Integration with any OIDC authentication provider
+  </Card>
+</CardGroup>
+
+## Configuring authentication backends
+
+Authentication methods are configured in `/etc/zulip/settings.py` via the `AUTHENTICATION_BACKENDS` setting:
+
+```python
+AUTHENTICATION_BACKENDS = (
+    'zproject.backends.EmailAuthBackend',
+    'zproject.backends.GoogleAuthBackend',
+    'zproject.backends.GitHubAuthBackend',
+)
+```
+
+After changing authentication backends, restart the server:
+
+```bash
+/home/zulip/deployments/current/scripts/restart-server
+```
+
+## Email and password
+
+The `EmailAuthBackend` is enabled by default and requires no additional configuration. Users set a password with the Zulip server and log in with their email and password.
+
+<Note>
+When first setting up your Zulip server, this method must be used to create the initial realm and user. You can disable it afterward.
+</Note>
+
+### Password security
+
+Zulip stores passwords using the industry-standard **Argon2** algorithm.
+
+Password strength requirements:
+
+```python
+# Minimum password length in characters
+PASSWORD_MIN_LENGTH = 6
+
+# Minimum password strength (estimated guesses)
+PASSWORD_MIN_GUESSES = 10000
+```
+
+Zulip uses the [zxcvbn](https://github.com/dropbox/zxcvbn) library to estimate password strength and reject weak passwords.
+
+## Social authentication
+
+### Google OAuth
+
+Enable Google authentication:
+
+<Steps>
+  <Step title="Create OAuth credentials">
+    Follow the instructions in `/etc/zulip/settings.py` to create OAuth 2.0 credentials in the [Google Cloud Console](https://console.cloud.google.com/).
+  </Step>
+
+  <Step title="Configure settings">
+    Edit `/etc/zulip/settings.py`:
+
+    ```python
+    AUTHENTICATION_BACKENDS = (
+        'zproject.backends.GoogleAuthBackend',
+        # ... other backends
+    )
+    ```
+
+    Set your client ID and secret in the same file (see inline docs).
+  </Step>
+
+  <Step title="Restart server">
+    ```bash
+    /home/zulip/deployments/current/scripts/restart-server
+    ```
+  </Step>
+</Steps>
+
+### GitHub OAuth
+
+Enable GitHub authentication:
+
+<Steps>
+  <Step title="Register OAuth app">
+    Register an OAuth app at [GitHub Settings](https://github.com/settings/applications/new) with:
+    - **Homepage URL**: `https://zulip.example.com`
+    - **Authorization callback URL**: `https://zulip.example.com/complete/github/`
+  </Step>
+
+  <Step title="Configure settings">
+    Add to `/etc/zulip/settings.py`:
+
+    ```python
+    AUTHENTICATION_BACKENDS = (
+        'zproject.backends.GitHubAuthBackend',
+        # ... other backends
+    )
+    ```
+
+    Configure client ID and secret as documented in the file.
+  </Step>
+</Steps>
+
+### GitLab OAuth
+
+Similar to GitHub, register an application in GitLab and configure the `GitLabAuthBackend`.
+
+### Sign in with Apple
+
+Apple authentication requires additional setup:
+
+<Steps>
+  <Step title="Create Services ID">
+    Visit the [Apple Developer site](https://developer.apple.com/account/resources/) and create a Services ID with Return URL:
+    ```
+    https://zulip.example.com/complete/apple/
+    ```
+  </Step>
+
+  <Step title="Create private key">
+    Create a Sign in with Apple private key and store it at:
+    ```bash
+    /etc/zulip/apple-auth-key.p8
+    ```
+
+    Set permissions:
+    ```bash
+    chown zulip:zulip /etc/zulip/apple-auth-key.p8
+    chmod 640 /etc/zulip/apple-auth-key.p8
+    ```
+  </Step>
+
+  <Step title="Configure settings">
+    Edit `/etc/zulip/settings.py`:
+
+    ```python
+    SOCIAL_AUTH_APPLE_TEAM = 'A1B2C3D4E5'
+    SOCIAL_AUTH_APPLE_SERVICES_ID = 'com.example.services'
+    SOCIAL_AUTH_APPLE_APP_ID = 'com.example.app'
+    SOCIAL_AUTH_APPLE_KEY = 'F6G7H8I9J0'
+
+    AUTHENTICATION_BACKENDS = (
+        'zproject.backends.AppleAuthBackend',
+        # ... other backends
+    )
+    ```
+  </Step>
+</Steps>
+
+## Microsoft Entra ID
+
+Configure Microsoft Entra ID (formerly AzureAD) by modifying the `AzureADAuthBackend` configuration in `/etc/zulip/settings.py`. See inline documentation for details.
+
+## LDAP / Active Directory
+
+Zulip supports retrieving user information via LDAP and using LDAP as an authentication mechanism.
+
+### Basic LDAP configuration
+
+<Steps>
+  <Step title="Configure connection">
+    Edit `/etc/zulip/settings.py` and fill out the "LDAP integration, part 1" section.
+
+    Add the bind password to `/etc/zulip/zulip-secrets.conf`:
+    ```ini
+    auth_ldap_bind_password = your_password
+    ```
+  </Step>
+
+  <Step title="Configure user mapping">
+    Set up user search and email mapping in `/etc/zulip/settings.py`. Example for Active Directory:
+
+    ```python
+    import ldap
+    from django_auth_ldap.config import LDAPSearch
+
+    AUTH_LDAP_USER_SEARCH = LDAPSearch(
+        "ou=users,dc=example,dc=com",
+        ldap.SCOPE_SUBTREE,
+        "(sAMAccountName=%(user)s)"
+    )
+
+    AUTH_LDAP_REVERSE_EMAIL_SEARCH = LDAPSearch(
+        "ou=users,dc=example,dc=com",
+        ldap.SCOPE_SUBTREE,
+        "(mail=%(email)s)"
+    )
+
+    AUTH_LDAP_USERNAME_ATTR = "sAMAccountName"
+    ```
+  </Step>
+
+  <Step title="Test configuration">
+    ```bash
+    /home/zulip/deployments/current/manage.py query_ldap username
+    ```
+  </Step>
+
+  <Step title="Enable authentication">
+    Add to `AUTHENTICATION_BACKENDS`:
+
+    ```python
+    AUTHENTICATION_BACKENDS = (
+        'zproject.backends.ZulipLDAPAuthBackend',
+        # ... other backends
+    )
+    ```
+  </Step>
+</Steps>
+
+### LDAP data synchronization
+
+Synchronize user data from LDAP:
+
+```bash
+/home/zulip/deployments/current/manage.py sync_ldap_user_data
+```
+
+Configure what to sync in `AUTH_LDAP_USER_ATTR_MAP`:
+
+```python
+AUTH_LDAP_USER_ATTR_MAP = {
+    "full_name": "cn",
+    "avatar": "thumbnailPhoto",  # Profile pictures
+}
+```
+
+<Tip>
+Set up a cron job to run `sync_ldap_user_data` regularly to keep user data in sync.
+</Tip>
+
+### Automatically deactivating users
+
+For Active Directory:
+
+```python
+AUTH_LDAP_USER_ATTR_MAP = {
+    "full_name": "cn",
+    "userAccountControl": "userAccountControl",
+}
+```
+
+Users disabled in Active Directory will be unable to log in immediately, and fully deactivated when you run `sync_ldap_user_data`.
+
+## SAML
+
+Zulip supports SAML authentication with providers like Okta, OneLogin, and Entra ID.
+
+### Basic SAML setup
+
+<Steps>
+  <Step title="Configure IdP">
+    Tell your Identity Provider:
+    - **SP Entity ID**: `https://zulip.example.com`
+    - **SSO URL**: `https://zulip.example.com/complete/saml/`
+  </Step>
+
+  <Step title="Configure Zulip">
+    Edit `/etc/zulip/settings.py` and fill out the "SAML Authentication" section:
+
+    ```python
+    SOCIAL_AUTH_SAML_ORG_INFO = {
+        "en-US": {
+            "displayname": "Example Corp",
+            "name": "example-corp",
+            "url": "https://example.com",
+        }
+    }
+
+    SOCIAL_AUTH_SAML_ENABLED_IDPS = {
+        "okta": {
+            "entity_id": "https://example.okta.com/app/abc123",
+            "url": "https://example.okta.com/app/abc123/sso/saml",
+            "x509cert": "okta",
+            "attr_user_permanent_id": "email",
+            "attr_first_name": "first_name",
+            "attr_last_name": "last_name",
+            "attr_email": "email",
+            "display_name": "Okta",
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Install certificates">
+    ```bash
+    mkdir -p /etc/zulip/saml/idps/
+    # Save IdP certificate
+    vim /etc/zulip/saml/idps/okta.crt
+
+    chown -R zulip.zulip /etc/zulip/saml/
+    find /etc/zulip/saml/ -type f -exec chmod 644 -- {} +
+    ```
+  </Step>
+
+  <Step title="Enable backend">
+    ```python
+    AUTHENTICATION_BACKENDS = (
+        'zproject.backends.SAMLAuthBackend',
+        # ... other backends
+    )
+    ```
+
+    Restart server:
+    ```bash
+    /home/zulip/deployments/current/scripts/restart-server
+    ```
+  </Step>
+</Steps>
+
+Your server's SAML metadata will be available at:
+```
+https://zulip.example.com/saml/metadata.xml
+```
+
+## OpenID Connect
+
+Zulip can integrate with any OpenID Connect (OIDC) authentication provider. See `/etc/zulip/settings.py` for configuration details.
+
+## Advanced configurations
+
+### Multiple organizations
+
+When hosting [multiple organizations](/self-hosting/multiple-organizations), you may need to configure `SOCIAL_AUTH_SUBDOMAIN` for social authentication:
+
+```python
+SOCIAL_AUTH_SUBDOMAIN = 'auth'
+```
+
+This uses `auth.zulip.example.com` for all OAuth callbacks.
+
+### Restricting authentication
+
+For LDAP, restrict access to specific groups:
+
+```python
+import django_auth_ldap
+
+AUTH_LDAP_GROUP_TYPE = django_auth_ldap.config.ActiveDirectoryGroupType()
+AUTH_LDAP_REQUIRE_GROUP = "cn=enabled,ou=groups,dc=example,dc=com"
+AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
+    "ou=groups,dc=example,dc=com",
+    ldap.SCOPE_SUBTREE,
+    "(objectClass=groupOfNames)"
+)
+```
+
+## Troubleshooting
+
+### LDAP issues
+
+- Use `manage.py query_ldap` to test your configuration
+- Check `/var/log/zulip/ldap.log` for detailed LDAP logs
+- Verify search queries and attribute mappings
+
+### OAuth issues
+
+- Verify callback URLs match exactly
+- Check client ID and secret are correct
+- Ensure OAuth app is enabled/published
+
+### SAML issues
+
+- Test with [SAMLtest.id](https://samltest.id/) first
+- Verify certificate files are readable
+- Check attribute mappings match your IdP
+
+## Getting help
+
+For custom authentication needs:
+
+- Visit the [Zulip development community](https://zulip.com/development-community/)
+- Contact [sales@zulip.com](mailto:sales@zulip.com) for custom development
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Email Setup" icon="envelope" href="/self-hosting/email">
+    Configure email for user notifications
+  </Card>
+  <Card title="LDAP Sync" icon="sync" href="/self-hosting/authentication#ldap-data-synchronization">
+    Set up automatic LDAP synchronization
+  </Card>
+  <Card title="Multiple Organizations" icon="building" href="/self-hosting/multiple-organizations">
+    Configure multi-organization hosting
+  </Card>
+  <Card title="Security" icon="shield" href="https://zulip.readthedocs.io/en/stable/production/securing-your-zulip-server.html">
+    Review security best practices
+  </Card>
+</CardGroup>

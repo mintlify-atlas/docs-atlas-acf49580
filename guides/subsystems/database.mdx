@@ -1,0 +1,580 @@
+---
+title: Database & Schema Migrations
+description: Learn about Zulip's PostgreSQL database structure and migration system
+---
+
+Zulip uses PostgreSQL as its primary database, with a comprehensive Django ORM-based schema migration system. This guide covers database structure, schema migrations, and best practices for working with Zulip's database.
+
+## Database Technology
+
+Zulip uses:
+
+- **PostgreSQL**: Primary relational database
+- **Django ORM**: Object-relational mapping and query interface
+- **Django Migrations**: Schema versioning and migration system
+
+### Why PostgreSQL?
+
+PostgreSQL provides:
+
+- **Full-text search**: Built-in search with custom stop words
+- **JSONB support**: Efficient storage of JSON data
+- **Advanced indexing**: Including partial and expression indexes
+- **Transactions**: ACID compliance with deferred constraints
+- **Performance**: Excellent query optimization
+- **Extensions**: PGroonga for multi-language search
+
+## Schema Migrations
+
+Zulip uses [Django's migration system](https://docs.djangoproject.com/en/5.0/topics/migrations/) to manage database schema changes.
+
+### Basic Migration Workflow
+
+#### 1. Update Models
+
+Edit model definitions in `zerver/models/*.py`:
+
+```python
+# zerver/models/users.py
+class UserProfile(models.Model):
+    full_name = models.CharField(max_length=100)
+    email = models.EmailField()
+    # Add new field
+    timezone = models.CharField(max_length=40, default='UTC')
+```
+
+#### 2. Generate Migration
+
+```bash
+./manage.py makemigrations
+```
+
+Django creates a migration file like `zerver/migrations/0234_userprofile_timezone.py`.
+
+#### 3. Rename if Needed
+
+If Django generated a date-based name like `0234_auto_20260305_1430.py`, rename it:
+
+```bash
+mv zerver/migrations/0234_auto_20260305_1430.py \
+   zerver/migrations/0234_userprofile_timezone.py
+```
+
+#### 4. Apply Migration
+
+```bash
+# Development
+tools/provision  # Automatically applies migrations
+
+# Or manually
+./manage.py migrate
+```
+
+#### 5. Commit Changes
+
+```bash
+git add zerver/models/users.py
+git add zerver/migrations/0234_userprofile_timezone.py
+git commit -m "models: Add timezone field to UserProfile."
+```
+
+### Custom Migrations with RunPython
+
+For data migrations or complex changes:
+
+```python
+# zerver/migrations/0234_populate_timezones.py
+from django.db import migrations
+
+def populate_timezones(apps, schema_editor):
+    UserProfile = apps.get_model('zerver', 'UserProfile')
+    
+    # Process in batches to avoid locking
+    batch_size = 1000
+    for offset in range(0, UserProfile.objects.count(), batch_size):
+        users = UserProfile.objects.all()[offset:offset + batch_size]
+        for user in users:
+            user.timezone = 'America/New_York'  # Default
+            user.save(update_fields=['timezone'])
+
+def reverse_migration(apps, schema_editor):
+    # Optional: Define how to reverse the migration
+    pass
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ('zerver', '0233_previous_migration'),
+    ]
+    
+    operations = [
+        migrations.RunPython(
+            populate_timezones,
+            reverse_code=reverse_migration,
+        ),
+    ]
+```
+
+<Warning>
+**Important Rules for RunPython:**
+
+1. **Don't import from `zerver`**: Code changes over time
+2. **Use `apps.get_model()`**: Get model as it existed at migration time
+3. **Only use ORM methods**: Don't access model properties/methods
+4. **Keep it simple**: Complex logic belongs in library code
+</Warning>
+
+### Example: Safe Model Access
+
+```python
+def migrate_data(apps, schema_editor):
+    # Good: Use apps.get_model()
+    Realm = apps.get_model('zerver', 'Realm')
+    
+    # Good: Use ORM methods
+    realms = Realm.objects.filter(is_active=True)
+    
+    # Bad: Don't do this
+    # from zerver.models import Realm  # Changes over time!
+    # realm.subdomain  # Properties may not exist at migration time
+```
+
+## Handling Migration Conflicts
+
+### Numbering Conflicts
+
+When multiple branches add migrations with the same number:
+
+**Option 1: Regenerate (Simple Changes)**
+
+```bash
+# Remove your migration
+git rm zerver/migrations/0234_my_migration.py
+
+# Rebase to get latest migrations
+git rebase main
+
+# Regenerate with new number
+./manage.py makemigrations
+```
+
+**Option 2: Renumber Tool (Complex Changes)**
+
+```bash
+# Automatically renumber and fix dependencies
+./tools/renumber-migrations
+
+# Review changes
+git diff
+
+# Commit
+git add zerver/migrations/
+git commit -m "migrations: Renumber after rebase."
+```
+
+### Merge Migrations
+
+When two branches create parallel migration paths:
+
+```bash
+# Create merge migration
+./manage.py makemigrations --merge
+
+# Django creates a migration that merges both paths
+# zerver/migrations/0236_merge_0234_0235.py
+```
+
+## Large Table Migrations
+
+For huge tables (Message, UserMessage), special precautions are needed.
+
+### Adding Columns
+
+Use `zerver/lib/migrate.py` helpers:
+
+```python
+from django.db import migrations
+from zerver.lib.migrate import do_batch_update
+
+def add_column_with_default(apps, schema_editor):
+    # Add column without default (fast)
+    schema_editor.execute(
+        "ALTER TABLE zerver_message ADD COLUMN priority INTEGER"
+    )
+    
+    # Backfill in batches (slow but non-blocking)
+    do_batch_update(
+        apps.get_model('zerver', 'Message'),
+        ['priority'],
+        lambda obj: setattr(obj, 'priority', 0),
+        batch_size=1000,
+    )
+
+class Migration(migrations.Migration):
+    atomic = False  # Don't use transaction
+    
+    operations = [
+        migrations.RunPython(add_column_with_default),
+    ]
+```
+
+### Adding Indexes
+
+Use `CONCURRENTLY` to avoid write locks:
+
+```python
+from django.contrib.postgres.operations import AddIndexConcurrently
+from django.db import migrations, models
+
+class Migration(migrations.Migration):
+    atomic = False  # Required for CONCURRENTLY
+    
+    operations = [
+        AddIndexConcurrently(
+            model_name='message',
+            index=models.Index(
+                fields=['sender', 'date_sent'],
+                name='message_sender_date_idx',
+            ),
+        ),
+    ]
+```
+
+<Info>
+`CREATE INDEX CONCURRENTLY` allows the table to be used normally during index creation, but takes longer than regular `CREATE INDEX`.
+</Info>
+
+### Batched Updates
+
+Process large updates in chunks:
+
+```python
+def backfill_data(apps, schema_editor):
+    Message = apps.get_model('zerver', 'Message')
+    
+    batch_size = 1000
+    total = Message.objects.count()
+    
+    for offset in range(0, total, batch_size):
+        messages = Message.objects.all()[offset:offset + batch_size]
+        
+        for message in messages:
+            message.new_field = compute_value(message)
+        
+        # Bulk update for efficiency
+        Message.objects.bulk_update(messages, ['new_field'])
+        
+        # Optional: Sleep to reduce load
+        # time.sleep(0.1)
+```
+
+## Non-Atomic Migrations
+
+For operations that can't run in a transaction:
+
+```python
+class Migration(migrations.Migration):
+    atomic = False  # Disable transaction
+    
+    dependencies = [
+        ('zerver', '0233_previous'),
+    ]
+    
+    operations = [
+        # Operations that require atomic=False:
+        # - CREATE INDEX CONCURRENTLY
+        # - Large batched updates
+        # - Operations on huge tables
+    ]
+```
+
+<Warning>
+Non-atomic migrations can leave the database in an inconsistent state if they fail partway through. Make them idempotent so they can be safely rerun.
+</Warning>
+
+### Making Migrations Idempotent
+
+```python
+def idempotent_migration(apps, schema_editor):
+    # Check if already done
+    if schema_editor.execute(
+        "SELECT COUNT(*) FROM information_schema.columns "
+        "WHERE table_name='zerver_message' AND column_name='new_field'"
+    ).fetchone()[0] > 0:
+        return  # Already migrated
+    
+    # Perform migration
+    schema_editor.execute(
+        "ALTER TABLE zerver_message ADD COLUMN new_field INTEGER"
+    )
+```
+
+## Multi-Step Migrations
+
+For really large changes, split into multiple deployments:
+
+### Phase 1: Add Column, Start Writing
+
+```python
+# Migration 0234: Add column
+class Migration(migrations.Migration):
+    operations = [
+        migrations.AddField(
+            model_name='message',
+            name='new_field',
+            field=models.IntegerField(null=True),
+        ),
+    ]
+```
+
+Deploy and update code to write to `new_field`.
+
+### Phase 2: Backfill Data
+
+```python
+# Migration 0235: Copy old data to new field
+class Migration(migrations.Migration):
+    atomic = False
+    
+    operations = [
+        migrations.RunPython(backfill_new_field),
+    ]
+```
+
+Deploy and run backfill.
+
+### Phase 3: Stop Using Old Field
+
+```python
+# No migration needed
+# Just update code to read from new_field instead of old_field
+```
+
+Deploy code changes.
+
+### Phase 4: Remove Old Field
+
+```python
+# Migration 0236: Drop old column
+class Migration(migrations.Migration):
+    operations = [
+        migrations.RemoveField(
+            model_name='message',
+            name='old_field',
+        ),
+    ]
+```
+
+Deploy final migration.
+
+## Testing Migrations
+
+### Migration Tests
+
+Zulip supports testing migrations with `MigrationsTestCase`:
+
+```python
+from zerver.lib.test_classes import MigrationsTestCase
+
+class TestTimezoneBackfill(MigrationsTestCase):
+    migrate_from = '0233_previous_migration'
+    migrate_to = '0234_populate_timezones'
+    
+    def setUpBeforeMigration(self, apps):
+        # Create test data using old schema
+        UserProfile = apps.get_model('zerver', 'UserProfile')
+        self.user = UserProfile.objects.create(
+            email='test@example.com',
+            full_name='Test User',
+            realm=self.realm,
+        )
+    
+    def test_migration(self):
+        # Check data after migration
+        user = UserProfile.objects.get(id=self.user.id)
+        self.assertEqual(user.timezone, 'America/New_York')
+```
+
+### Integration Tests
+
+```bash
+# Run migration tests
+./tools/test-backend zerver/tests/test_migrations.py
+
+# Test specific migration
+./manage.py test zerver.tests.test_migrations.TestTimezoneBackfill
+```
+
+## No-Op Migrations
+
+Avoid creating migrations for non-schema changes:
+
+**Example: Field Validators**
+
+```python
+# This doesn't change the database schema
+class UserProfile(models.Model):
+    email = models.EmailField(
+        validators=[validate_email]  # Validator added
+    )
+```
+
+Instead of creating a new migration, modify the latest migration that touched this field.
+
+## Database Schema Best Practices
+
+### Use Appropriate Field Types
+
+```python
+# Good
+date_joined = models.DateTimeField()
+count = models.IntegerField()
+metadata = models.JSONField()
+
+# Bad
+date_joined = models.CharField(max_length=50)  # Use DateTimeField!
+count = models.CharField(max_length=20)        # Use IntegerField!
+```
+
+### Add Database Indexes
+
+```python
+class Message(models.Model):
+    sender = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
+    date_sent = models.DateTimeField()
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['sender', 'date_sent']),
+            models.Index(fields=['realm', 'date_sent']),
+        ]
+```
+
+### Use Database Constraints
+
+```python
+class UserProfile(models.Model):
+    email = models.EmailField()
+    realm = models.ForeignKey(Realm, on_delete=models.CASCADE)
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['email', 'realm'],
+                name='unique_email_per_realm'
+            ),
+        ]
+```
+
+### Deferred Constraints
+
+Zulip uses `DEFERRABLE INITIALLY DEFERRED` for many constraints:
+
+```python
+class Meta:
+    constraints = [
+        models.UniqueConstraint(
+            fields=['email', 'realm'],
+            name='unique_email_per_realm',
+            deferrable=models.Deferrable.DEFERRED,
+        ),
+    ]
+```
+
+This allows constraint checking to be postponed until transaction commit, enabling complex data manipulations.
+
+## Troubleshooting
+
+### Migration Fails with Trigger Events Error
+
+```
+django.db.utils.OperationalError: cannot ALTER TABLE "table_name" 
+because it has pending trigger events
+```
+
+**Solution:** Make the migration non-atomic or split into separate migrations:
+
+```python
+class Migration(migrations.Migration):
+    atomic = False  # Add this
+```
+
+### Migration Takes Too Long
+
+**Solutions:**
+
+1. Use `CONCURRENTLY` for indexes
+2. Batch large updates
+3. Split into multiple migrations
+4. Consider background workers for data migrations
+
+### Rollback Failed Migration
+
+```bash
+# Rollback to previous migration
+./manage.py migrate zerver 0233
+
+# Or rollback all migrations for app
+./manage.py migrate zerver zero
+```
+
+## Development Database Management
+
+### Rebuild Development Database
+
+```bash
+# Rebuild test database
+tools/rebuild-test-database
+
+# Rebuild development database
+tools/rebuild-dev-database
+```
+
+### Reset Migration State
+
+If migrations get corrupted:
+
+```bash
+# Drop and recreate database
+tools/rebuild-dev-database
+
+# Reapply all migrations
+./manage.py migrate
+```
+
+## Production Considerations
+
+### Pre-Deployment Checklist
+
+- [ ] Test migration on staging with production data copy
+- [ ] Estimate migration time
+- [ ] Plan maintenance window if needed
+- [ ] Verify rollback procedure
+- [ ] Check disk space for large table modifications
+- [ ] Review migration for performance impact
+
+### Deployment Cache Handling
+
+Memcached is automatically flushed when migrations run:
+
+```python
+# manage.py migrate automatically triggers this
+post_migrate.connect(flush_cache_on_migrate)
+```
+
+This ensures cached objects match the new schema.
+
+### Zero-Downtime Migrations
+
+For zero-downtime deployments:
+
+1. **Add nullable columns first** (can run with old code)
+2. **Deploy code that writes to new columns** (backward compatible)
+3. **Backfill data** (run as background task)
+4. **Make columns non-nullable** (after backfill completes)
+5. **Remove old columns** (after full deployment)
+
+## Related Resources
+
+- [Django Migrations Documentation](https://docs.djangoproject.com/en/5.0/topics/migrations/)
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/current/)
+- [Writing Migration Tests](https://www.caktusgroup.com/blog/2016/02/02/writing-unit-tests-django-migrations/)

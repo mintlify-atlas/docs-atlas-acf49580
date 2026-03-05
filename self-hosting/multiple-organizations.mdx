@@ -1,0 +1,374 @@
+---
+title: Multiple Organizations
+description: Host multiple Zulip organizations on a single server
+---
+
+Most Zulip servers host a single organization. This guide explains how to host multiple Zulip organizations on one server using subdomains.
+
+## Overview
+
+Zulip supports multiple organizations on a single server by hosting each on its own subdomain:
+
+- `org1.zulip.example.com`
+- `org2.zulip.example.com`
+- `team.zulip.example.com`
+
+<Note>
+Web security standards require one subdomain per organization to support users being logged into multiple organizations simultaneously.
+</Note>
+
+## Creating a new organization
+
+To add a new organization:
+
+<Steps>
+  <Step title="Configure SSL certificates">
+    Ensure you have SSL certificates for all subdomains.
+
+    **Using Certbot:**
+    ```bash
+    /home/zulip/deployments/current/scripts/setup/setup-certbot \
+        --email=admin@example.com \
+        org1.zulip.example.com \
+        org2.zulip.example.com \
+        team.zulip.example.com
+    ```
+
+    **Or use a wildcard certificate** for `*.zulip.example.com`.
+  </Step>
+
+  <Step title="Update nginx configuration">
+    If you changed certificates, restart nginx:
+
+    ```bash
+    service nginx reload
+    ```
+  </Step>
+
+  <Step title="Generate organization creation link">
+    ```bash
+    /home/zulip/deployments/current/manage.py generate_realm_creation_link
+    ```
+
+    **For a specific subdomain:**
+    ```bash
+    /home/zulip/deployments/current/manage.py generate_realm_creation_link \
+        --subdomain=newteam
+    ```
+  </Step>
+
+  <Step title="Create the organization">
+    Open the generated link in your browser and follow the prompts to set up the new organization.
+  </Step>
+</Steps>
+
+## SSL certificates for multiple organizations
+
+### Multi-domain certificate
+
+Request a certificate for multiple subdomains:
+
+```bash
+/home/zulip/deployments/current/scripts/setup/setup-certbot \
+    --email=admin@example.com \
+    subdomain1.zulip.example.com \
+    subdomain2.zulip.example.com \
+    subdomain3.zulip.example.com
+```
+
+### Wildcard certificate
+
+For many subdomains, use a wildcard certificate:
+
+```bash
+# Note: Requires manual DNS challenges
+certbot certonly --manual --preferred-challenges dns \
+    -d '*.zulip.example.com' \
+    -d 'zulip.example.com'
+```
+
+<Tip>
+Wildcard certificates require manual DNS record updates for renewal. Automate this with your DNS provider's API if possible.
+</Tip>
+
+## Custom hostnames
+
+Use non-subdomain hostnames with `REALM_HOSTS`:
+
+```python
+# /etc/zulip/settings.py
+REALM_HOSTS = {
+    "sales": "sales-team.example.com",
+    "support": "help.example.com",
+}
+```
+
+This maps:
+- Realm with subdomain `"sales"` → `sales-team.example.com`
+- Realm with subdomain `"support"` → `help.example.com`
+
+When creating these realms, use the subdomain key (`sales` or `support`), not the full hostname.
+
+<Note>
+The subdomain key is internal and won't be displayed to users.
+</Note>
+
+## Root domain organization
+
+You can host an organization on the root domain (`zulip.example.com`):
+
+- Internally, this organization has subdomain `''` (empty string)
+- Use `-r ''` in management commands to reference it
+
+### Mixing root and subdomains
+
+<Warning>
+Hosting both a root domain organization and subdomain organizations only works well if users don't need to access both simultaneously. The root domain's cookies are visible to all subdomains.
+</Warning>
+
+**Recommended:**
+- All organizations on subdomains: `org1.example.com`, `org2.example.com`
+
+**Not recommended:**
+- Root domain + subdomains: `example.com` + `team.example.com`
+
+## Changing organization subdomain
+
+Change an organization's subdomain:
+
+```bash
+/home/zulip/deployments/current/manage.py change_subdomain \
+    --old-subdomain=oldname \
+    --new-subdomain=newname
+```
+
+<Warning>
+**Changing subdomain:**
+- Changes the organization's URL
+- Invalidates all existing links
+- Requires users to update their bookmarks
+- Logs out all users
+- Requires mobile app users to reconfigure
+
+See [organization URL change guide](https://zulip.com/help/change-organization-url) for user impact.
+</Warning>
+
+## Authentication configuration
+
+### Social authentication
+
+Many OAuth providers require whitelisting callback URLs. Options:
+
+**Option 1: List all subdomains**
+
+Register each subdomain's callback URL:
+- `https://org1.zulip.example.com/complete/google/`
+- `https://org2.zulip.example.com/complete/google/`
+- `https://org3.zulip.example.com/complete/google/`
+
+**Option 2: Use a dedicated auth subdomain (recommended)**
+
+Use a single subdomain for all OAuth callbacks:
+
+```python
+# /etc/zulip/settings.py
+SOCIAL_AUTH_SUBDOMAIN = 'auth'
+```
+
+Register only:
+- `https://auth.zulip.example.com/complete/google/`
+
+All organizations will use this URL for authentication.
+
+### LDAP and SAML
+
+For LDAP and SAML, you may want to restrict which organizations each user can access.
+
+**LDAP organization restriction:**
+
+```python
+# /etc/zulip/settings.py
+AUTH_LDAP_USER_ATTR_MAP = {
+    "full_name": "cn",
+    "org_membership": "department",
+}
+```
+
+Users with `department: engineering` LDAP attribute can access the `engineering` organization.
+
+**SAML organization restriction:**
+
+In your IdP configuration:
+
+```python
+SOCIAL_AUTH_SAML_ENABLED_IDPS = {
+    "okta": {
+        # ... other config
+        "limit_to_subdomains": ["engineering", "sales"],
+    }
+}
+```
+
+## Management commands
+
+Many management commands require specifying which organization:
+
+```bash
+# Root domain organization
+./manage.py command -r ''
+
+# Specific subdomain
+./manage.py command -r subdomain
+
+# Examples:
+./manage.py list_users -r engineering
+./manage.py export -r sales
+./manage.py delete_realm -r oldteam
+```
+
+## Open realm creation
+
+Allow anyone to create new organizations:
+
+```python
+# /etc/zulip/settings.py
+OPEN_REALM_CREATION = True
+```
+
+<Warning>
+Offering Zulip hosting to anyone on the Internet entails significant responsibility:
+- Security monitoring
+- Abuse/spam prevention
+- Legal compliance (GDPR, CCPA, etc.)
+- Resource management
+- Content moderation
+
+Only enable if you can manage these responsibilities.
+</Warning>
+
+## System bot realm
+
+Every Zulip server has a special `zulipinternal` realm that contains system bots:
+
+- Notification Bot
+- Welcome Bot
+- Email Gateway Bot
+- And others
+
+List system bots:
+```bash
+./scripts/get-django-setting INTERNAL_BOTS
+```
+
+This realm is managed automatically - you don't need to interact with it.
+
+## Resource management
+
+### Database considerations
+
+All organizations share:
+- The same PostgreSQL database
+- The same Redis cache
+- The same RabbitMQ queues
+
+For many organizations, consider:
+- Larger database server
+- Connection pooling
+- Separate database server
+
+### Storage considerations
+
+Upload storage:
+
+**Local storage:**
+```
+/home/zulip/uploads/
+├── 2/  # Organization ID 2
+├── 3/  # Organization ID 3
+└── 4/  # Organization ID 4
+```
+
+**S3 storage:**
+Each organization's files are stored with path prefix based on organization ID.
+
+### Performance
+
+For many active organizations:
+- Increase RAM allocation
+- Consider multiple application servers
+- Use dedicated database server
+- Monitor queue backlogs
+
+See [scalability guidelines](/self-hosting/requirements#scalability-guidelines).
+
+## Migrating organizations
+
+### Move organization to new server
+
+Use [backup and restore](/self-hosting/backup-restore):
+
+1. Export organization data
+2. Install Zulip on new server
+3. Import organization
+4. Update DNS
+
+### Consolidate servers
+
+Merge multiple single-organization servers:
+
+1. Export data from each server
+2. Set up multi-organization server with subdomains
+3. Import each organization to its subdomain
+4. Update DNS for all domains
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Wrong organization appears">
+    Browser cookies from root domain affecting subdomain.
+
+    **Solution:** Clear cookies and ensure proper subdomain configuration.
+  </Accordion>
+
+  <Accordion title="Can't log in to multiple organizations">
+    Using root domain + subdomain combination.
+
+    **Solution:** Move all organizations to subdomains (no root domain org).
+  </Accordion>
+
+  <Accordion title="SSL certificate errors for new subdomain">
+    Certificate doesn't include new subdomain.
+
+    **Solution:** Request new multi-domain or wildcard certificate:
+    ```bash
+    /home/zulip/deployments/current/scripts/setup/setup-certbot \
+        --email=admin@example.com $(list-all-subdomains)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best practices
+
+<Check>Use subdomains for all organizations (avoid root domain mixing)</Check>
+<Check>Use `SOCIAL_AUTH_SUBDOMAIN` for OAuth</Check>
+<Check>Document subdomain assignments</Check>
+<Check>Monitor resources as organizations grow</Check>
+<Check>Set up per-organization backup strategy</Check>
+<Check>Plan for scaling (database, storage)</Check>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/self-hosting/authentication">
+    Configure authentication for multiple orgs
+  </Card>
+  <Card title="SSL Certificates" icon="lock" href="/self-hosting/ssl-certificates">
+    Set up certificates for subdomains
+  </Card>
+  <Card title="Backup & Restore" icon="database" href="/self-hosting/backup-restore">
+    Back up multiple organizations
+  </Card>
+  <Card title="Deployment" icon="server" href="/self-hosting/deployment">
+    Advanced deployment configurations
+  </Card>
+</CardGroup>

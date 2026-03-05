@@ -1,0 +1,260 @@
+---
+title: 'List Users'
+description: 'GET /api/v1/users - Retrieve users in the organization'
+---
+
+## Endpoint
+
+```
+GET /api/v1/users
+```
+
+Retrieve details on users in the organization.
+
+## Request Parameters
+
+<ParamField query="client_gravatar" type="boolean" default="false">
+  Whether to use client-side Gravatar rendering.
+</ParamField>
+
+<ParamField query="include_custom_profile_fields" type="boolean" default="false">
+  Whether to include custom profile field values.
+</ParamField>
+
+<ParamField query="user_ids" type="array">
+  Limit results to specific user IDs.
+  
+  Example: `[1, 2, 3]`
+  
+  **Added in Zulip 11.0 (feature level 384)**
+</ParamField>
+
+## Response
+
+<ResponseField name="members" type="array" required>
+  Array of user objects.
+</ResponseField>
+
+### User Object
+
+<ResponseField name="user_id" type="integer">
+  Unique user ID.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Zulip API email address.
+</ResponseField>
+
+<ResponseField name="full_name" type="string">
+  User's full name.
+</ResponseField>
+
+<ResponseField name="is_active" type="boolean">
+  Whether the user account is active.
+</ResponseField>
+
+<ResponseField name="is_admin" type="boolean">
+  Whether the user is an administrator.
+</ResponseField>
+
+<ResponseField name="is_owner" type="boolean">
+  Whether the user is an organization owner.
+</ResponseField>
+
+<ResponseField name="is_guest" type="boolean">
+  Whether the user is a guest.
+</ResponseField>
+
+<ResponseField name="is_bot" type="boolean">
+  Whether the user is a bot.
+</ResponseField>
+
+<ResponseField name="role" type="integer">
+  User's role:
+  - `100` - Owner
+  - `200` - Administrator
+  - `300` - Moderator
+  - `400` - Member
+  - `600` - Guest
+</ResponseField>
+
+<ResponseField name="avatar_url" type="string">
+  URL of the user's avatar.
+</ResponseField>
+
+<ResponseField name="timezone" type="string">
+  User's timezone.
+</ResponseField>
+
+<ResponseField name="date_joined" type="string">
+  ISO 8601 timestamp of when the user joined.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET https://your-domain.zulipchat.com/api/v1/users \
+  -u email@example.com:API_KEY
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Get all users
+result = client.get_members()
+
+for user in result['members']:
+    print(f"{user['full_name']} ({user['email']})")
+    print(f"  Role: {user['role']}")
+    print(f"  Joined: {user['date_joined']}")
+    print()
+
+# Get specific users
+result = client.get_members(user_ids=[5, 10, 15])
+
+# Include custom profile fields
+result = client.get_members(
+    include_custom_profile_fields=True
+)
+
+for user in result['members']:
+    if 'profile_data' in user:
+        print(f"{user['full_name']} profile:")
+        for field_id, field_data in user['profile_data'].items():
+            print(f"  {field_id}: {field_data['value']}")
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Get all users
+const result = await client.users.retrieve();
+console.log(result.members);
+
+// Get specific users
+const specificUsers = await client.users.retrieve({
+  user_ids: [5, 10, 15]
+});
+```
+
+</CodeGroup>
+
+## Response Example
+
+<ResponseExample>
+
+```json Success
+{
+  "result": "success",
+  "msg": "",
+  "members": [
+    {
+      "user_id": 10,
+      "email": "alice@example.com",
+      "delivery_email": null,
+      "full_name": "Alice",
+      "is_active": true,
+      "is_admin": false,
+      "is_owner": false,
+      "is_guest": false,
+      "is_bot": false,
+      "role": 400,
+      "avatar_url": "https://secure.gravatar.com/avatar/hash?d=identicon&version=1",
+      "bot_type": null,
+      "timezone": "America/New_York",
+      "date_joined": "2024-01-15T10:30:00.000000+00:00",
+      "profile_data": {},
+      "is_imported_stub": false
+    },
+    {
+      "user_id": 23,
+      "email": "bot@example.com",
+      "delivery_email": "bot@example.com",
+      "full_name": "Helper Bot",
+      "is_active": true,
+      "is_admin": false,
+      "is_owner": false,
+      "is_guest": false,
+      "is_bot": true,
+      "bot_owner_id": 10,
+      "role": 400,
+      "avatar_url": "https://secure.gravatar.com/avatar/hash?d=identicon&version=1",
+      "bot_type": 1,
+      "timezone": "",
+      "date_joined": "2024-02-01T14:22:00.000000+00:00",
+      "is_imported_stub": false
+    }
+  ]
+}
+```
+
+</ResponseExample>
+
+## User Roles
+
+<AccordionGroup>
+  <Accordion title="Owner (100)">
+    Full administrative access with additional permissions like billing and security settings.
+  </Accordion>
+  
+  <Accordion title="Administrator (200)">
+    Can manage organization settings, users, and channels.
+  </Accordion>
+  
+  <Accordion title="Moderator (300)">
+    Can help manage users and content with limited administrative access.
+  </Accordion>
+  
+  <Accordion title="Member (400)">
+    Regular organization member with standard permissions.
+  </Accordion>
+  
+  <Accordion title="Guest (600)">
+    Limited access user, typically external collaborators.
+  </Accordion>
+</AccordionGroup>
+
+## Filtering Users
+
+```python Examples
+# Get only active users
+active_users = [u for u in result['members'] if u['is_active']]
+
+# Get only bots
+bots = [u for u in result['members'] if u['is_bot']]
+
+# Get only admins
+admins = [u for u in result['members'] if u['is_admin'] or u['is_owner']]
+
+# Get users by role
+members = [u for u in result['members'] if u['role'] == 400]
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Create User" icon="user-plus" href="/api/users/create">
+    Create a new user account
+  </Card>
+  <Card title="Update User" icon="pen" href="/api/users/update">
+    Modify user details
+  </Card>
+  <Card title="User Presence" icon="circle" href="/api/users/presence">
+    Get user presence status
+  </Card>
+  <Card title="Get Messages" icon="inbox" href="/api/messages/get">
+    Filter messages by user
+  </Card>
+</CardGroup>

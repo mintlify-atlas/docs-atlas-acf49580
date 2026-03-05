@@ -1,0 +1,119 @@
+---
+title: 'User Presence'
+description: 'GET /api/v1/users/{user_id_or_email}/presence - Get user presence status'
+---
+
+## Endpoint
+
+```
+GET /api/v1/users/{user_id_or_email}/presence
+```
+
+Get the presence status for a specific user.
+
+## Path Parameters
+
+<ParamField path="user_id_or_email" type="string" required>
+  The user ID or email address.
+  
+  Examples: `"42"` or `"alice@example.com"`
+</ParamField>
+
+## Response
+
+<ResponseField name="presence" type="object">
+  Object containing presence details with client information.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET https://your-domain.zulipchat.com/api/v1/users/alice@example.com/presence \
+  -u email@example.com:API_KEY
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Get user presence by email
+result = client.get_user_presence("alice@example.com")
+
+print(result['presence'])
+
+# Get user presence by ID
+result = client.get_user_presence(42)
+```
+
+```javascript JavaScript
+const result = await client.users.getPresence({
+  user_id: 'alice@example.com'
+});
+
+console.log(result.presence);
+```
+
+</CodeGroup>
+
+## Response Example
+
+<ResponseExample>
+
+```json Success
+{
+  "result": "success",
+  "msg": "",
+  "presence": {
+    "website": {
+      "timestamp": 1594825445,
+      "status": "active"
+    },
+    "aggregated": {
+      "timestamp": 1594825445,
+      "status": "active"
+    }
+  }
+}
+```
+
+</ResponseExample>
+
+## Presence Status
+
+<AccordionGroup>
+  <Accordion title="active">
+    User is actively using Zulip (within last 2 minutes).
+  </Accordion>
+  
+  <Accordion title="idle">
+    User has Zulip open but inactive (2-10 minutes).
+  </Accordion>
+  
+  <Accordion title="offline">
+    User hasn't been active in over 10 minutes.
+  </Accordion>
+</AccordionGroup>
+
+## Use Cases
+
+- Display user online status in custom UIs
+- Check if users are available before sending messages
+- Track team availability
+- Build presence-aware features
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Users" icon="users" href="/api/users/list">
+    Get all users
+  </Card>
+  <Card title="Real-time Events" icon="bolt" href="/api/events/register">
+    Subscribe to presence updates
+  </Card>
+  <Card title="Send Message" icon="paper-plane" href="/api/messages/send">
+    Send messages to users
+  </Card>
+</CardGroup>

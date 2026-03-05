@@ -1,0 +1,108 @@
+---
+title: 'API Overview'
+description: 'Introduction to the Zulip REST API'
+---
+
+## Welcome to the Zulip API
+
+Zulip's APIs allow you to integrate other services with Zulip. This powerful open source group chat platform provides a comprehensive REST API for building integrations, bots, and custom applications.
+
+## Base URL
+
+The Zulip API uses different base URLs depending on your deployment:
+
+- **Zulip Cloud**: `https://{subdomain}.zulipchat.com/api/v1`
+- **Self-hosted**: `https://{your-domain}/api/v1`
+- **Development**: `http://localhost:9991/api/v1`
+
+## Getting Started
+
+To use the Zulip API, you'll need:
+
+1. **An API key** - See the [Authentication](/api/authentication) guide
+2. **A client library** (optional but recommended) - See [Client Libraries](/api/client-libraries)
+3. **Your organization's Zulip URL**
+
+## API Features
+
+The Zulip API provides access to:
+
+<CardGroup cols={2}>
+  <Card title="Messages" icon="message">
+    Send, retrieve, update, and delete messages
+  </Card>
+  <Card title="Streams & Topics" icon="stream">
+    Manage channels (streams) and organize conversations by topics
+  </Card>
+  <Card title="Users" icon="users">
+    Manage users, profiles, and presence status
+  </Card>
+  <Card title="Real-time Events" icon="bolt">
+    Subscribe to live updates via the events API
+  </Card>
+</CardGroup>
+
+## Common Use Cases
+
+### Send Messages to Zulip
+
+If you want to send content into Zulip, you can:
+- Use the [Send Message](/api/messages/send) endpoint directly
+- Write a native [incoming webhook integration](/api/integrations/incoming-webhooks)
+- Use Zapier or IFTTT integrations
+
+### Build Interactive Bots
+
+For bots that react to activity inside Zulip:
+- Use Zulip's [real-time events API](/api/events/register)
+- Leverage the Python framework for interactive bots
+- Subscribe to message events and respond programmatically
+
+### Integrate External Services
+
+Zulip supports various integration patterns:
+- **Incoming webhooks** - Receive data from external services
+- **Outgoing webhooks** - Send Zulip events to external services  
+- **Interactive bots** - Build two-way integrations
+
+## Rate Limiting
+
+The Zulip API implements rate limiting to ensure system stability. Rate limits vary by endpoint and organization plan. When rate limited, you'll receive a `429` HTTP status code.
+
+## Error Handling
+
+The Zulip API uses standard HTTP response codes:
+
+- `200` - Success
+- `400` - Bad request (invalid parameters)
+- `401` - Unauthorized (invalid API key)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not found
+- `429` - Rate limit exceeded
+
+All error responses include a JSON body with:
+
+```json
+{
+  "result": "error",
+  "msg": "Human-readable error message",
+  "code": "ERROR_CODE"
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Learn how to authenticate API requests
+  </Card>
+  <Card title="Client Libraries" icon="code" href="/api/client-libraries">
+    Get started with official client libraries
+  </Card>
+  <Card title="Send a Message" icon="paper-plane" href="/api/messages/send">
+    Try your first API call
+  </Card>
+  <Card title="Events API" icon="bolt" href="/api/events/register">
+    Build real-time integrations
+  </Card>
+</CardGroup>

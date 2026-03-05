@@ -1,0 +1,661 @@
+---
+title: Adding a Webhook Integration
+description: Complete guide to creating incoming webhook integrations
+---
+
+This tutorial walks through creating an **incoming webhook integration** that receives HTTP requests from a third-party service and posts formatted messages to Zulip.
+
+We'll use the [Hello World webhook](https://zulip.com/integrations/helloworld) as our example.
+
+## What is a Webhook Integration?
+
+A webhook integration:
+
+1. Third-party service sends HTTP POST to Zulip
+2. Zulip processes the payload
+3. Zulip posts formatted message to a channel or DM
+
+Examples: GitHub, Sentry, Jira, Stripe
+
+## Prerequisites
+
+- [Zulip development environment](/development/setup) set up
+- Basic Python knowledge
+- Understanding of HTTP and JSON
+- Sample webhook payloads from the service
+
+## Step 0: Capture Webhook Payloads
+
+Before coding, collect sample payloads from the third-party service.
+
+### Using webhook.site
+
+<Steps>
+  <Step title="Get test URL">
+    1. Go to https://webhook.site/
+    2. Copy the unique URL
+  </Step>
+  
+  <Step title="Configure service">
+    In the third-party service, set webhook URL to the webhook.site URL
+  </Step>
+  
+  <Step title="Trigger events">
+    Perform actions that trigger webhooks (create issue, push code, etc.)
+  </Step>
+  
+  <Step title="Capture payloads">
+    View requests in webhook.site
+    
+    Save payload JSON to files
+  </Step>
+</Steps>
+
+### Our Example Payload
+
+For Hello World, we'll use this simple payload:
+
+**`fixtures/hello.json`**:
+
+```json
+{
+  "featured_title": "Marilyn Monroe",
+  "featured_url": "https://en.wikipedia.org/wiki/Marilyn_Monroe"
+}
+```
+
+## Step 1: Create Package Structure
+
+<Steps>
+  <Step title="Create directory">
+    ```bash
+    mkdir zerver/webhooks/helloworld
+    ```
+  </Step>
+  
+  <Step title="Create Python package">
+    ```bash
+    touch zerver/webhooks/helloworld/__init__.py
+    ```
+  </Step>
+  
+  <Step title="Create fixtures directory">
+    ```bash
+    mkdir zerver/webhooks/helloworld/fixtures
+    ```
+  </Step>
+</Steps>
+
+Structure:
+
+```
+zerver/webhooks/helloworld/
+├── __init__.py
+├── view.py              # Main webhook code
+├── tests.py             # Tests
+├── doc.md              # User documentation
+└── fixtures/
+    └── hello.json      # Test payload
+```
+
+## Step 2: Write the Webhook Handler
+
+**`zerver/webhooks/helloworld/view.py`**:
+
+```python
+from django.http import HttpRequest, HttpResponse
+
+from zerver.decorator import webhook_view
+from zerver.lib.response import json_success
+from zerver.lib.typed_endpoint import JsonBodyPayload, typed_endpoint
+from zerver.lib.validator import WildValue, check_string
+from zerver.lib.webhooks.common import check_send_webhook_message
+from zerver.models import UserProfile
+
+
+@webhook_view("HelloWorld")
+@typed_endpoint
+def api_helloworld_webhook(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    payload: JsonBodyPayload[WildValue],
+) -> HttpResponse:
+    # Extract data from payload
+    featured_title = payload["featured_title"].tame(check_string)
+    featured_url = payload["featured_url"].tame(check_string)
+    
+    # Construct message
+    body = "Hello! I am happy to be here! :smile:"
+    body += f"\nThe Wikipedia featured article for today is **[{featured_title}]({featured_url})**"
+    
+    # Set topic
+    topic_name = "Hello World"
+    
+    # Send message
+    check_send_webhook_message(
+        request,
+        user_profile,
+        topic_name,
+        body
+    )
+    
+    return json_success(request)
+```
+
+### Key Components
+
+#### Decorators
+
+```python
+@webhook_view("HelloWorld")  # Integration name for analytics
+@typed_endpoint              # Type-safe parameter handling
+```
+
+Use integration's official name in camel case.
+
+#### Function Signature
+
+```python
+def api_helloworld_webhook(
+    request: HttpRequest,      # Required
+    user_profile: UserProfile, # Required
+    *,
+    payload: JsonBodyPayload[WildValue],  # JSON body
+) -> HttpResponse:
+```
+
+Naming: `api_{integration_name}_webhook`
+
+#### Payload Extraction
+
+```python
+# Safe extraction with validation
+featured_title = payload["featured_title"].tame(check_string)
+
+# With default
+optional_field = payload.get("field", "default").tame(check_string)
+
+# Nested data
+user_name = payload["user"]["name"].tame(check_string)
+
+# Arrays
+commits = payload["commits"].tame(check_list(check_dict))
+for commit in commits:
+    message = commit["message"].tame(check_string)
+```
+
+#### Message Formatting
+
+Use [Zulip Markdown](/api/message-formatting):
+
+```python
+body = f"""**Title**: {data['title']}
+
+{data['description']}
+
+* Item 1
+* Item 2
+
+[Link]({data['url']}) :tada:
+"""
+```
+
+#### Sending Messages
+
+```python
+check_send_webhook_message(
+    request,
+    user_profile,
+    topic_name,  # Topic for channel messages
+    body,        # Message content
+    unquote_url_parameters=True  # Optional: decode URL params
+)
+```
+
+This automatically:
+- Posts to channel if `stream` param in URL
+- DMs bot owner otherwise
+- Returns proper HTTP responses
+
+## Step 3: Register the Webhook
+
+**`zerver/lib/integrations.py`**:
+
+```python
+INCOMING_WEBHOOK_INTEGRATIONS: List[IncomingWebhookIntegration] = [
+    # ... other integrations ...
+    IncomingWebhookIntegration(
+        "helloworld",
+        ["misc"],  # Categories: see INTEGRATION_CATEGORIES
+        [WebhookScreenshotConfig("hello.json")],  # For screenshot
+        display_name="Hello World",
+    ),
+    # ...
+]
+```
+
+This:
+- Creates API endpoint: `/api/v1/external/helloworld`
+- Adds to integrations page
+- Enables screenshot generation
+
+### With URL Options
+
+For webhooks with configuration:
+
+```python
+IncomingWebhookIntegration(
+    "github",
+    ["version-control"],
+    [WebhookScreenshotConfig("push.json")],
+    display_name="GitHub",
+    url_options=[
+        WebhookUrlOption.build_preset_config(PresetUrlOption.BRANCHES),
+        WebhookUrlOption(
+            name="only_issues",
+            label="Only include issues",
+            validator=check_bool,
+        ),
+    ],
+)
+```
+
+Generates URL like:
+```
+/api/v1/external/github?api_key=...&stream=commits&branches=main,dev&only_issues=true
+```
+
+## Step 4: Create Fixtures
+
+One fixture per event type.
+
+**`zerver/webhooks/helloworld/fixtures/hello.json`**:
+
+```json
+{
+  "featured_title": "Marilyn Monroe",
+  "featured_url": "https://en.wikipedia.org/wiki/Marilyn_Monroe"
+}
+```
+
+For services with multiple event types:
+
+```
+fixtures/
+├── issue_opened.json
+├── issue_closed.json  
+├── pull_request_opened.json
+└── push.json
+```
+
+### Fixtures with HTTP Headers
+
+Some services use headers for event type:
+
+```python
+# In view.py
+def api_github_webhook(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    payload: JsonBodyPayload[WildValue],
+) -> HttpResponse:
+    event = get_event_header(request, "X-GitHub-Event", "GitHub")
+    
+    if event == "push":
+        return handle_push(payload, ...)
+    elif event == "issues":
+        return handle_issue(payload, ...)
+```
+
+Document in tests:
+
+```python
+def get_http_headers(self, name: str) -> dict[str, str]:
+    if name == "push":
+        return {"X-GitHub-Event": "push"}
+    return {}
+```
+
+## Step 5: Write Tests
+
+**`zerver/webhooks/helloworld/tests.py`**:
+
+```python
+from zerver.lib.test_classes import WebhookTestCase
+
+
+class HelloWorldHookTests(WebhookTestCase):
+    CHANNEL_NAME = "helloworld"
+    URL_TEMPLATE = "/api/v1/external/helloworld?api_key={api_key}&stream={stream}"
+    WEBHOOK_DIR_NAME = "helloworld"
+    
+    def test_hello_message(self) -> None:
+        """Test the main webhook functionality."""
+        expected_topic_name = "Hello World"
+        expected_message = (
+            "Hello! I am happy to be here! :smile:\n"
+            "The Wikipedia featured article for today is "
+            "**[Marilyn Monroe](https://en.wikipedia.org/wiki/Marilyn_Monroe)**"
+        )
+        
+        # Uses fixtures/hello.json
+        self.check_webhook(
+            "hello",
+            expected_topic_name,
+            expected_message,
+        )
+```
+
+### Test Helpers
+
+```python
+# Basic test
+self.check_webhook(
+    "fixture_name",      # Uses fixtures/{name}.json
+    "Expected Topic",
+    "Expected message",
+)
+
+# With custom content type
+self.check_webhook(
+    "form_data",
+    "Topic",
+    "Message",
+    content_type="application/x-www-form-urlencoded",
+)
+
+# Test direct message
+self.send_and_test_private_message(
+    "fixture_name",
+    expected_message="Message",
+)
+```
+
+### Testing Multiple Events
+
+```python
+class GitHubHookTests(WebhookTestCase):
+    CHANNEL_NAME = "github"
+    URL_TEMPLATE = "/api/v1/external/github?api_key={api_key}&stream={stream}"
+    WEBHOOK_DIR_NAME = "github"
+    
+    def test_push(self) -> None:
+        expected_topic = "my-repo"
+        expected_message = "user pushed 2 commits to main"
+        self.check_webhook("push", expected_topic, expected_message)
+    
+    def test_issues_opened(self) -> None:
+        expected_topic = "my-repo / Issue #123"
+        expected_message = "**user** opened issue: Fix bug"
+        self.check_webhook("issue_opened", expected_topic, expected_message)
+    
+    def test_issues_closed(self) -> None:
+        expected_topic = "my-repo / Issue #123"
+        expected_message = "**user** closed issue: Fix bug"
+        self.check_webhook("issue_closed", expected_topic, expected_message)
+```
+
+### Run Tests
+
+```bash
+# Run webhook tests
+./tools/test-backend zerver/webhooks/helloworld
+
+# Run specific test
+./tools/test-backend zerver.webhooks.helloworld.tests.HelloWorldHookTests.test_hello_message
+```
+
+## Step 6: Add Logo
+
+Add integration logo:
+
+**`static/images/integrations/logos/helloworld.svg`**
+
+Requirements:
+- SVG format (or PNG if SVG unavailable)
+- Square aspect ratio
+- From official service branding
+
+Optimize:
+
+```bash
+./tools/setup/optimize-svg static/images/integrations/logos/helloworld.svg
+```
+
+This also generates bot avatar.
+
+## Step 7: Document the Integration
+
+**`zerver/webhooks/helloworld/doc.md`**:
+
+```markdown
+Get Hello World notifications in Zulip!
+
+{start_tabs}
+
+1. {!create-channel.md!}
+
+1. {!create-an-incoming-webhook.md!}
+
+1. {!generate-integration-url.md!}
+
+1. In your Hello World settings, add the URL from above as a webhook URL.
+
+{end_tabs}
+
+{!congrats.md!}
+
+![](/static/images/integrations/helloworld/001.png)
+```
+
+### Common Macros
+
+- `{!create-channel.md!}` - Create dedicated channel
+- `{!create-an-incoming-webhook.md!}` - Create webhook bot
+- `{!generate-integration-url.md!}` - Get webhook URL
+- `{!congrats.md!}` - Success message
+
+See [Integration Documentation Guide](/documentation/integrations).
+
+### Generate Screenshot
+
+```bash
+./tools/screenshots/generate-integration-docs-screenshot --integration helloworld
+```
+
+Creates: `static/images/integrations/helloworld/001.png`
+
+## Step 8: Manual Testing
+
+### Using curl
+
+<Steps>
+  <Step title="Create webhook bot">
+    1. In Zulip, go to Settings > Bots
+    2. Add bot, type: Incoming webhook
+    3. Copy API key
+  </Step>
+  
+  <Step title="Test webhook">
+    ```bash
+    curl -X POST \
+      -H "Content-Type: application/json" \
+      -d '{"featured_title":"Test","featured_url":"https://example.com"}' \
+      "http://localhost:9991/api/v1/external/helloworld?api_key=YOUR_KEY"
+    ```
+    
+    Response:
+    ```json
+    {"msg":"","result":"success"}
+    ```
+  </Step>
+  
+  <Step title="Check Zulip">
+    Log in as bot owner, see DM from bot
+  </Step>
+</Steps>
+
+### Using Management Command
+
+```bash
+./manage.py send_webhook_fixture_message \
+  --fixture=zerver/webhooks/helloworld/fixtures/hello.json \
+  '--url=http://localhost:9991/api/v1/external/helloworld?api_key=YOUR_KEY'
+```
+
+### Using Dev Panel
+
+1. Run `./tools/run-dev`
+2. Go to `http://localhost:9991/devtools/integrations/`
+3. Select bot, integration, and fixture
+4. Click **Send**
+
+## Advanced Topics
+
+### Multiple Event Types
+
+Handle different events:
+
+```python
+@webhook_view("MyService")
+@typed_endpoint
+def api_myservice_webhook(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    payload: JsonBodyPayload[WildValue],
+) -> HttpResponse:
+    event_type = payload["event"].tame(check_string)
+    
+    if event_type == "issue.created":
+        return handle_issue_created(request, user_profile, payload)
+    elif event_type == "issue.updated":
+        return handle_issue_updated(request, user_profile, payload)
+    else:
+        raise UnsupportedWebhookEventTypeError(event_type)
+
+def handle_issue_created(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    payload: WildValue,
+) -> HttpResponse:
+    # Extract data
+    issue = payload["issue"]
+    title = issue["title"].tame(check_string)
+    
+    # Format message
+    topic = f"Issue #{issue['id'].tame(check_int)}"
+    body = f"New issue: **{title}**"
+    
+    # Send
+    check_send_webhook_message(request, user_profile, topic, body)
+    return json_success(request)
+```
+
+### URL Parameters
+
+Custom parameters in webhook URL:
+
+```python
+@typed_endpoint
+def api_github_webhook(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    payload: JsonBodyPayload[WildValue],
+    branches: str | None = None,  # ?branches=main,dev
+    only_issues: bool = False,    # ?only_issues=true
+) -> HttpResponse:
+    # Filter by branches
+    if branches:
+        branch_list = branches.split(",")
+        if payload["ref"].tame(check_string) not in branch_list:
+            return json_success(request)  # Skip this event
+    
+    # Skip if not an issue
+    if only_issues and payload["event"] != "issues":
+        return json_success(request)
+    
+    # Process...
+```
+
+### Form Data (Not JSON)
+
+Some services send URL-encoded data:
+
+```python
+from zerver.lib.typed_endpoint import typed_endpoint_without_parameters
+
+@webhook_view("FormService")
+@typed_endpoint_without_parameters
+def api_formservice_webhook(
+    request: HttpRequest,
+    user_profile: UserProfile,
+) -> HttpResponse:
+    # Access POST data
+    title = request.POST.get("title", "")
+    description = request.POST.get("description", "")
+    
+    body = f"**{title}**\n\n{description}"
+    check_send_webhook_message(request, user_profile, "Form", body)
+    return json_success(request)
+```
+
+### Ignored Events
+
+Silently ignore certain events:
+
+```python
+IGNORED_EVENTS = {"ping", "status", "heartbeat"}
+
+def api_myservice_webhook(...) -> HttpResponse:
+    event = payload["event"].tame(check_string)
+    
+    if event in IGNORED_EVENTS:
+        return json_success(request)  # Success, but no message
+    
+    # Process other events...
+```
+
+## Best Practices
+
+- ✓ One fixture per event type
+- ✓ Test both success and error cases  
+- ✓ Use descriptive topic names
+- ✓ Format messages with Markdown
+- ✓ Handle missing/optional fields gracefully
+- ✓ Document setup steps clearly
+- ✓ Include screenshot in documentation
+- ✓ Support filtering (branches, events, etc.)
+
+## Checklist
+
+Before submitting PR:
+
+- [ ] Fixtures created for all event types
+- [ ] Tests pass: `./tools/test-backend zerver/webhooks/myintegration`
+- [ ] Linters pass: `./tools/lint`
+- [ ] Logo added and optimized
+- [ ] Documentation written with macros
+- [ ] Screenshot generated
+- [ ] Manually tested with real service
+- [ ] Registered in `integrations.py`
+- [ ] Code follows [style guide](/contributing/code-style)
+
+## Related Documentation
+
+- [Bot Integration Tutorial](/development/tutorials/integration) - For polling bots
+- [Integration Documentation Guide](/documentation/integrations) - Writing docs
+- [Zulip API](/api/) - API reference
+- [Incoming Webhooks Overview](/webhooks/overview) - Technical details
+
+## Example Integrations
+
+Study these for reference:
+
+- **Basecamp** - Simple, good template to copy
+- **GitHub** - Complex with many event types
+- **Stripe** - Good message formatting
+- **Sentry** - Error handling examples

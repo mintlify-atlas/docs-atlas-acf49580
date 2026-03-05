@@ -1,0 +1,194 @@
+---
+title: Installation
+description: Install and set up a self-hosted Zulip server
+---
+
+You can install a self-hosted Zulip server on a system of your choice. Zulip is designed to be easy to install and maintain, with a streamlined installation process that handles all dependencies automatically.
+
+## Prerequisites
+
+Before installing Zulip, ensure your system meets the [requirements](/self-hosting/requirements). You'll need:
+
+- A dedicated machine or VM running a supported OS
+- At least 2 GB RAM (4 GB for 100+ users)
+- 10 GB free disk space
+- A hostname in DNS
+- Credentials for sending email
+
+## Installation process
+
+The Zulip installation involves four main steps:
+
+<Steps>
+  <Step title="Set up a base server">
+    Provision and log in to a fresh Ubuntu or Debian system that satisfies the installation requirements for your expected usage level.
+
+    Supported operating systems:
+    - Ubuntu 22.04
+    - Ubuntu 24.04
+    - Debian 12
+    - Debian 13
+  </Step>
+
+  <Step title="Download the latest release">
+    Download and unpack the latest server release:
+
+    ```bash
+    cd $(mktemp -d)
+    curl -fLO https://download.zulip.com/server/zulip-server-latest.tar.gz
+    tar -xf zulip-server-latest.tar.gz
+    ```
+
+    To verify the download, check the [sha256sums](https://download.zulip.com/server/SHA256SUMS.txt) of release tarballs.
+  </Step>
+
+  <Step title="Install Zulip">
+    Become root if you aren't already:
+
+    ```bash
+    [ "$(whoami)" != "root" ] && sudo -s
+    ```
+
+    Run the installer with your email and hostname:
+
+    ```bash
+    ./zulip-server-*/scripts/setup/install --push-notifications --certbot \
+        --email=YOUR_EMAIL --hostname=YOUR_HOSTNAME
+    ```
+
+    The installer takes a few minutes to run as it installs Zulip's dependencies. It is designed to be idempotent—if the script fails, you can correct the issue and rerun it.
+  </Step>
+
+  <Step title="Create your organization">
+    When installation completes, the install script prints a secure one-time-use organization creation link. Open this link in your browser and follow the prompts to set up your organization and user account.
+
+    <Note>
+    You can generate a new organization creation link by running:
+    ```bash
+    /home/zulip/deployments/current/manage.py generate_realm_creation_link
+    ```
+    </Note>
+  </Step>
+</Steps>
+
+## Installer options
+
+The Zulip installer supports several options to customize your installation:
+
+### Required options
+
+- `--email=it-team@example.com`: A real email address for the person or team who maintains the Zulip installation. This appears as the contact email in automated emails, help pages, and error pages.
+
+- `--hostname=zulip.example.com`: The user-accessible domain name for this Zulip server—what users will type in their web browser.
+
+### SSL certificate options
+
+<CodeGroup>
+```bash Certbot (Recommended)
+./zulip-server-*/scripts/setup/install --certbot \
+    --email=YOUR_EMAIL --hostname=YOUR_HOSTNAME
+```
+
+```bash Self-signed (Testing only)
+./zulip-server-*/scripts/setup/install --self-signed-cert \
+    --email=YOUR_EMAIL --hostname=YOUR_HOSTNAME
+```
+</CodeGroup>
+
+- `--certbot`: Automatically obtains an SSL certificate using [Certbot](https://certbot.eff.org/) and configures automatic renewal
+- `--self-signed-cert`: Generates a self-signed SSL certificate (not suitable for production)
+
+### Push notification options
+
+- `--push-notifications`: Registers your server for the Mobile Push Notification Service
+- `--no-push-notifications`: Skips push notification registration
+- `--agree-to-terms-of-service`: Auto-accepts the terms of service (useful for scripted installations)
+- `--no-submit-usage-statistics`: Disables submitting usage statistics when push notifications are enabled
+
+### Advanced options
+
+- `--postgresql-version=16`: Sets the PostgreSQL version (14, 15, 16, 17, or 18; default is 18)
+- `--postgresql-database-name=customdb`: Customizes the database name (first install only)
+- `--postgresql-database-user=customuser`: Customizes the database user (first install only)
+- `--no-init-db`: Skips database initialization (when you already have a Zulip database)
+- `--no-overwrite-settings`: Preserves existing `/etc/zulip` configuration files
+
+## What the installer does
+
+The Zulip installer performs the following tasks:
+
+1. Creates the `zulip` user that Zulip servers run as
+2. Creates `/home/zulip/deployments/` for Zulip code deployments
+3. Installs Zulip's dependencies (Python packages, system libraries, etc.)
+4. Configures third-party services:
+   - PostgreSQL (database)
+   - RabbitMQ (message queue)
+   - Memcached (caching)
+   - Redis (caching and presence)
+   - nginx (web server)
+5. Initializes the Zulip database
+6. Sets up systemd services for all Zulip components
+
+## Getting started
+
+After installation, configure essential services:
+
+1. [Set up outgoing email](/self-hosting/email) so Zulip can confirm new users' email addresses and send notifications
+2. Review [server settings](/self-hosting/settings) to customize your installation
+3. Configure [authentication methods](/self-hosting/authentication) for your users
+4. Set up [SSL certificates](/self-hosting/ssl-certificates) if you didn't use `--certbot`
+
+## Alternative installation methods
+
+### Docker
+
+Zulip provides an official Docker image. See the [Docker documentation](https://github.com/zulip/docker-zulip) for installation instructions.
+
+<Note>
+We recommend using Docker only if your organization has a preference for deploying services using Docker. The standard installer is simpler to maintain and upgrade.
+</Note>
+
+### Installing from Git
+
+To install a development version of Zulip from Git:
+
+```bash
+sudo apt install git
+git clone https://github.com/zulip/zulip.git zulip-server-git
+cd zulip-server-git
+./scripts/setup/install --email=YOUR_EMAIL --hostname=YOUR_HOSTNAME
+```
+
+This is useful for:
+- Testing features not yet in a release
+- Contributing to Zulip development
+- Running the `main` branch for cutting-edge features
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Settings" icon="gear" href="/self-hosting/settings">
+    Customize your Zulip server configuration
+  </Card>
+  <Card title="Set Up Email" icon="envelope" href="/self-hosting/email">
+    Configure outgoing email for notifications
+  </Card>
+  <Card title="Enable Authentication" icon="key" href="/self-hosting/authentication">
+    Set up Google, SAML, LDAP, and other auth methods
+  </Card>
+  <Card title="Backup & Restore" icon="database" href="/self-hosting/backup-restore">
+    Learn about backup strategies
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+If you encounter issues during installation:
+
+- Check `/var/log/zulip/install.log` for detailed logs
+- Review the [troubleshooting guide](/self-hosting/troubleshooting)
+- The installer is idempotent—you can safely rerun it after fixing issues
+
+<Warning>
+If you're importing data from another system, stop here and follow the import instructions for [Slack](https://zulip.com/help/import-from-slack), [Mattermost](https://zulip.com/help/import-from-mattermost), or [another Zulip server](https://zulip.readthedocs.io/en/stable/production/export-and-import.html#import-into-a-new-zulip-server).
+</Warning>

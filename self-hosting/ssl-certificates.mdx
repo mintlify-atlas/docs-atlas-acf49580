@@ -1,0 +1,376 @@
+---
+title: SSL Certificates
+description: Configure HTTPS certificates for your Zulip server
+---
+
+Zulip runs over HTTPS only to keep your communications secure. You'll need an SSL/TLS certificate for your domain.
+
+## Certificate options
+
+<CardGroup cols={3}>
+  <Card title="Certbot" icon="certificate">
+    **Recommended**
+    
+    Free automated certificates from Let's Encrypt with automatic renewal
+  </Card>
+  <Card title="Manual Install" icon="file-certificate">
+    **Enterprise**
+    
+    Use your existing SSL certificate infrastructure
+  </Card>
+  <Card title="Self-Signed" icon="triangle-exclamation">
+    **Testing Only**
+    
+    Quick setup for development/testing
+  </Card>
+</CardGroup>
+
+## Certbot (Recommended)
+
+[Let's Encrypt](https://letsencrypt.org/) provides free, automated SSL certificates. Zulip includes simple automation for [Certbot](https://certbot.eff.org/), a Let's Encrypt client.
+
+### During installation
+
+Use the `--certbot` flag when installing Zulip:
+
+```bash
+./zulip-server-*/scripts/setup/install --certbot \
+    --email=YOUR_EMAIL --hostname=YOUR_HOSTNAME
+```
+
+This automatically:
+- Creates a Let's Encrypt account
+- Requests a certificate for your hostname
+- Configures automatic renewal via systemd timer
+
+### After installation
+
+Enable Certbot on an existing Zulip server:
+
+```bash
+sudo -s  # Become root
+/home/zulip/deployments/current/scripts/setup/setup-certbot \
+    --email=EMAIL HOSTNAME
+```
+
+**Example:**
+```bash
+/home/zulip/deployments/current/scripts/setup/setup-certbot \
+    --email=admin@example.com zulip.example.com
+```
+
+### Multiple domain certificate
+
+Request a certificate for multiple domains:
+
+```bash
+/home/zulip/deployments/current/scripts/setup/setup-certbot \
+    --email=admin@example.com \
+    zulip.example.com \
+    chat.example.com \
+    collaboration.example.com
+```
+
+### How Certbot works
+
+1. **Initial setup**: Creates Let's Encrypt account and requests certificate
+2. **Domain validation**: Proves you control the domain via HTTP challenge
+3. **Certificate issuance**: Receives and installs certificate
+4. **Automatic renewal**: Systemd timer renews certificates before expiration
+
+<Note>
+Let's Encrypt certificates expire after 90 days. Certbot automatically renews them, so no maintenance is required.
+</Note>
+
+### Renewal process
+
+Certbot renewal is handled automatically by a systemd timer. Renewals:
+
+- Run twice daily
+- Only renew if certificate expires within 30 days
+- Automatically reload nginx after renewal
+
+Manually trigger renewal:
+
+```bash
+certbot renew
+```
+
+### Troubleshooting Certbot
+
+If certificate renewal fails:
+
+<AccordionGroup>
+  <Accordion title="Check renewal status">
+    ```bash
+    certbot certificates
+    ```
+
+    Shows all certificates and their expiration dates.
+  </Accordion>
+
+  <Accordion title="Test renewal">
+    ```bash
+    certbot renew --dry-run
+    ```
+
+    Simulates renewal without actually doing it.
+  </Accordion>
+
+  <Accordion title="Common issues">
+    **Firewall blocking port 80**
+
+    Certbot needs port 80 accessible for domain validation:
+    ```bash
+    # Check if port 80 is open
+    curl -I http://zulip.example.com
+    ```
+
+    **DNS not configured**
+
+    Verify your hostname resolves:
+    ```bash
+    dig zulip.example.com
+    ```
+
+    **Rate limits**
+
+    Let's Encrypt has [rate limits](https://letsencrypt.org/docs/rate-limits/). If hit, wait or use staging environment for testing.
+  </Accordion>
+</AccordionGroup>
+
+### Wildcard certificates
+
+For wildcard certificates (e.g., `*.example.com`):
+
+1. Use Certbot's manual DNS challenge mode
+2. See [Certbot wildcard documentation](https://community.letsencrypt.org/t/getting-wildcard-certificates-with-certbot/56285)
+3. Note: Requires manual DNS record updates
+
+<Note>
+Wildcard certificates are useful for [hosting multiple organizations](/self-hosting/multiple-organizations) on subdomains.
+</Note>
+
+## Manual certificate installation
+
+If you have your own SSL certificate:
+
+<Steps>
+  <Step title="Prepare certificate files">
+    You need:
+    - Private key file
+    - Certificate file with **full chain** (including intermediate certificates)
+
+    <Warning>
+    The certificate must include the complete chain. Missing intermediate certificates will cause connection failures in some browsers and all mobile apps.
+    </Warning>
+  </Step>
+
+  <Step title="Install certificate files">
+    ```bash
+    # Install private key
+    sudo cp your-private-key.key /etc/ssl/private/zulip.key
+    sudo chmod 640 /etc/ssl/private/zulip.key
+    sudo chown root:root /etc/ssl/private/zulip.key
+
+    # Install certificate (with full chain)
+    sudo cp your-certificate.crt /etc/ssl/certs/zulip.combined-chain.crt
+    sudo chmod 644 /etc/ssl/certs/zulip.combined-chain.crt
+    sudo chown root:root /etc/ssl/certs/zulip.combined-chain.crt
+    ```
+  </Step>
+
+  <Step title="Reload nginx">
+    ```bash
+    sudo service nginx reload
+    ```
+  </Step>
+</Steps>
+
+### Certificate chain verification
+
+Verify your certificate includes the full chain:
+
+<Tabs>
+  <Tab title="SSL Labs (Public)">
+    For publicly accessible servers, use [SSL Labs tester](https://www.ssllabs.com/ssltest/analyze.html).
+
+    Look for "Chain issues" in the results.
+  </Tab>
+
+  <Tab title="curl (Any server)">
+    ```bash
+    # Test your server
+    curl -SsI https://zulip.example.com
+
+    # Verify curl rejects incomplete chains
+    curl -SsI https://incomplete-chain.badssl.com
+    # Should show certificate error
+    ```
+
+    <Note>
+    On macOS, `curl` may accept incomplete chains. Test from Linux for accurate results.
+    </Note>
+  </Tab>
+</Tabs>
+
+### Certificate renewal
+
+Set up automatic renewal according to your certificate provider's process. Most enterprise CAs provide automation tools.
+
+## Self-signed certificates
+
+Self-signed certificates are convenient for testing but **not suitable for production**.
+
+### During installation
+
+```bash
+./zulip-server-*/scripts/setup/install --self-signed-cert \
+    --email=YOUR_EMAIL --hostname=YOUR_HOSTNAME
+```
+
+### After installation
+
+```bash
+sudo -s  # Become root
+/home/zulip/deployments/current/scripts/setup/generate-self-signed-cert HOSTNAME
+```
+
+Reload nginx:
+```bash
+sudo service nginx reload
+```
+
+<Warning>
+**Self-signed certificate limitations:**
+- Browsers show security warnings
+- Mobile apps won't connect by default
+- Not suitable for production use
+- Users must manually trust the certificate
+</Warning>
+
+### Mobile apps with self-signed certificates
+
+Zulip mobile apps can use custom CA certificates:
+
+- [Desktop app documentation](https://zulip.com/help/custom-certificates)
+- Configure a custom CA to validate internal certificates
+
+## TLS configuration
+
+### Supported TLS versions
+
+Zulip's default nginx configuration:
+
+```nginx
+ssl_protocols TLSv1.2 TLSv1.3;
+```
+
+<Note>
+TLS 1.2 has been standard for over 10 years. All modern browsers require it.
+</Note>
+
+### Cipher configuration
+
+Zulip uses modern, secure cipher suites by default. The configuration is in:
+
+```
+/etc/nginx/zulip-include/ssl-defaults.conf
+```
+
+## Troubleshooting SSL
+
+### Mobile app connection issues
+
+<AccordionGroup>
+  <Accordion title="Android app can't connect">
+    **Incomplete certificate chain**
+
+    The most common cause. Verify using [SSL Labs](https://www.ssllabs.com/ssltest/) or:
+
+    ```bash
+    openssl s_client -connect zulip.example.com:443 -showcerts
+    ```
+
+    Look for the full chain from your certificate to the root CA.
+  </Accordion>
+
+  <Accordion title="iOS app can't connect">
+    **TLS version too old**
+
+    iOS requires TLS 1.2+. Check your server:
+
+    ```bash
+    curl -v --tlsv1.2 https://zulip.example.com 2>&1 | grep TLS
+    ```
+
+    Ensure nginx uses:
+    ```nginx
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ```
+  </Accordion>
+
+  <Accordion title="Android 7.0 specific issues">
+    **Elliptic curve compatibility**
+
+    Android 7.0 only supports `secp256r1` curve. Ensure nginx offers it:
+
+    ```nginx
+    ssl_ecdh_curve secp256r1:secp384r1:secp521p1;
+    ```
+
+    Test with [SSL Labs](https://www.ssllabs.com/ssltest/) and look for "TLS_ECDHE" cipher suites.
+  </Accordion>
+</AccordionGroup>
+
+### Testing SSL configuration
+
+Comprehensive SSL test:
+
+```bash
+# Basic connectivity
+curl -I https://zulip.example.com
+
+# Check certificate chain
+openssl s_client -connect zulip.example.com:443 -showcerts
+
+# Verify TLS versions
+nmap --script ssl-enum-ciphers -p 443 zulip.example.com
+```
+
+For public servers, use [SSL Labs tester](https://www.ssllabs.com/ssltest/) for comprehensive analysis.
+
+## Best practices
+
+### Certificate management
+
+<Check>Use Certbot for automatic renewal</Check>
+<Check>Monitor certificate expiration dates</Check>
+<Check>Set up alerts for renewal failures</Check>
+<Check>Keep backups of certificate files</Check>
+<Check>Document your certificate renewal process</Check>
+
+### Security recommendations
+
+<Check>Use TLS 1.2 or higher only</Check>
+<Check>Disable weak cipher suites</Check>
+<Check>Enable HSTS (configured by default in Zulip)</Check>
+<Check>Regularly update nginx and OpenSSL</Check>
+<Check>Monitor for new SSL/TLS vulnerabilities</Check>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Multiple Organizations" icon="building" href="/self-hosting/multiple-organizations">
+    Set up SSL for multiple subdomains
+  </Card>
+  <Card title="Reverse Proxies" icon="network-wired" href="https://zulip.readthedocs.io/en/stable/production/reverse-proxies.html">
+    Configure SSL with a reverse proxy
+  </Card>
+  <Card title="Security" icon="shield" href="https://zulip.readthedocs.io/en/stable/production/securing-your-zulip-server.html">
+    Review security best practices
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/self-hosting/troubleshooting">
+    Debug SSL connection issues
+  </Card>
+</CardGroup>

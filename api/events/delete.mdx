@@ -1,0 +1,106 @@
+---
+title: 'Delete Event Queue'
+description: 'DELETE /api/v1/events - Delete an event queue'
+---
+
+## Endpoint
+
+```
+DELETE /api/v1/events
+```
+
+Delete an event queue.
+
+<Info>
+  Event queues automatically expire after ~10 minutes of inactivity, so manually deleting them is usually unnecessary.
+</Info>
+
+## Request Parameters
+
+<ParamField query="queue_id" type="string" required>
+  The ID of the event queue to delete.
+</ParamField>
+
+## Response
+
+<ResponseField name="result" type="string">
+  `"success"` on successful deletion.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X DELETE 'https://your-domain.zulipchat.com/api/v1/events?queue_id=1517975029:0' \
+  -u email@example.com:API_KEY
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Register a queue
+result = client.register()
+queue_id = result['queue_id']
+
+# Delete the queue when done
+result = client.deregister(queue_id)
+print(result)
+# {'result': 'success', 'msg': ''}
+```
+
+```javascript JavaScript
+const result = await client.queues.deregister({
+  queue_id: '1517975029:0'
+});
+
+console.log(result);
+```
+
+</CodeGroup>
+
+## Response Example
+
+<ResponseExample>
+
+```json Success
+{
+  "result": "success",
+  "msg": ""
+}
+```
+
+```json Error - Invalid Queue
+{
+  "result": "error",
+  "msg": "Bad event queue ID",
+  "code": "BAD_EVENT_QUEUE_ID"
+}
+```
+
+</ResponseExample>
+
+## When to Delete
+
+Manually delete event queues in these scenarios:
+
+- Your application is shutting down cleanly
+- You're switching to a different event configuration
+- You want to free server resources immediately
+
+<Info>
+  Most applications don't need to delete queues manually. The automatic expiration handles cleanup.
+</Info>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Register Queue" icon="plus" href="/api/events/register">
+    Create an event queue
+  </Card>
+  <Card title="Get Events" icon="download" href="/api/events/get">
+    Fetch events from queue
+  </Card>
+</CardGroup>

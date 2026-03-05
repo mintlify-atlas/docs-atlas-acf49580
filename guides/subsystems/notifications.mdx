@@ -1,0 +1,555 @@
+---
+title: Notification System
+description: Understand how Zulip delivers email and mobile push notifications
+---
+
+Zulip's notification system ensures users receive timely alerts about important messages via email and mobile push notifications. This guide explains the architecture and flow of Zulip's notification delivery system.
+
+## Overview
+
+Zulip delivers notifications through two primary channels:
+
+1. **Email notifications**: Batched emails for missed messages
+2. **Mobile push notifications**: Real-time alerts to iOS and Android devices
+3. **Desktop notifications**: Handled client-side by the web/desktop app
+
+## Important Design Challenges
+
+### The Idle Desktop Problem
+
+A user's desktop computer at the office shouldn't prevent notifications on their phone. Solution: Users with an "online" client they haven't interacted with in several minutes are treated as idle.
+
+### The Hard Disconnect Problem
+
+When a user closes their laptop immediately after a message arrives, they should still get notified. Solution: Multi-layered checks including:
+- Presence system tracking
+- Event queue monitoring
+- Queue garbage collection hooks
+
+## Notification Flow
+
+Here's the complete flow from message send to notification delivery:
+
+```
+┌─────────────────┐
+│ User sends msg  │
+└───────┬─────────┘
+       │
+       ▼
+┌─────────────────┐
+│ do_send_messages │
+└───────┬─────────┘
+       │ Compute:
+       │ - Mentions
+       │ - Alert words
+       │ - Flags
+       │ - presence_idle_user_ids
+       ▼
+┌─────────────────┐
+│ Tornado events   │
+│ system          │
+└───────┬─────────┘
+       │ Check if user is:
+       │ - Idle/offline
+       │ - Has active clients
+       ▼
+┌─────────────────┐
+│ Queue events     │
+│ (if notifiable) │
+└───────┬─────────┘
+       │
+       ├───────────────────────────┐
+       │                            │
+       ▼                            ▼
+┌─────────────┐           ┌──────────────┐
+│ Email queue │           │ Push queue   │
+└─────┬───────┘           └───┬─────────┘
+     │                        │
+     │ Wait 2 min            │ Process
+     │ Batch msgs            │ immediately
+     ▼                        ▼
+┌─────────────┐           ┌──────────────┐
+│ Send email  │           │ Send push    │
+└─────────────┘           └──────────────┘
+```
+
+## Message Send Path
+
+### Step 1: do_send_messages
+
+`do_send_messages` in `zerver/actions/message_send.py` processes outgoing messages and computes notification data:
+
+```python
+def do_send_messages(
+    messages: list[SendMessageRequest],
+) -> list[SentMessageResult]:
+    # Compute notification-relevant data
+    for message_send_request in messages:
+        # Analyze message content
+        mentions = extract_mentions(message_send_request)
+        wildcard_mentions = check_wildcard_mentions(message_send_request)
+        alert_words = find_alert_words(message_send_request)
+        
+        # Store in UserMessage flags
+        flags = compute_flags(
+            mentions=mentions,
+            wildcard_mentions=wildcard_mentions,
+            alert_words=alert_words,
+        )
+        
+        # Determine which users are idle
+        presence_idle_user_ids = get_idle_users(
+            recipients=recipients,
+            min_idle_duration=timedelta(minutes=2),
+        )
+    
+    # Send to event system
+    send_event_on_commit(
+        event_data,
+        presence_idle_user_ids=presence_idle_user_ids,
+    )
+```
+
+### Step 2: Tornado Event Processing
+
+The Tornado events system determines who should receive notifications:
+
+```python
+def maybe_enqueue_notifications(
+    user_profile_id: int,
+    message: dict,
+    presence_idle_user_ids: set[int],
+) -> None:
+    # Check if user is idle
+    if user_profile_id in presence_idle_user_ids:
+        should_notify = True
+    elif receiver_is_off_zulip(user_profile_id):
+        # No active event queues = user offline
+        should_notify = True
+    else:
+        should_notify = False
+    
+    if should_notify:
+        # Queue for notifications
+        queue_event("missedmessage_emails", data)
+        queue_event("missedmessage_mobile_notifications", data)
+```
+
+### Key Decision Logic
+
+A user receives a notification if:
+
+1. **In `presence_idle_user_ids`**: User hasn't interacted with Zulip in 2+ minutes
+2. **OR `receiver_is_off_zulip()` returns True**: User has no active event queues
+
+This handles both:
+- **Idle desktop**: User present but not actively using Zulip
+- **Hard disconnect**: User closed laptop without Zulip knowing
+
+### Delayed Check: Queue Garbage Collection
+
+When event queues are garbage-collected (after ~10 minutes), `missedmessage_hook` runs another check:
+
+```python
+def missedmessage_hook(
+    user_profile_id: int,
+    queue_id: str,
+    last_event_id: int,
+) -> None:
+    # If this was the user's last queue
+    if is_last_queue_for_user(user_profile_id, queue_id):
+        # Queue notifications for messages since last_event_id
+        enqueue_missed_messages(
+            user_profile_id,
+            since_event_id=last_event_id,
+        )
+```
+
+This catches hard disconnects that happened shortly after presence was updated.
+
+## Email Notifications
+
+### Queue: missedmessage_emails
+
+**Worker:** `MissedMessageWorker` in `zerver/worker/missedmessage_emails.py`
+
+**Flow:**
+
+1. **Wait Period**: Queue events wait 2 minutes before processing
+2. **Batching**: Multiple messages are combined into a single email
+3. **Final Checks**:
+   - Is message still unread?
+   - Was message deleted?
+   - Are email notifications still enabled?
+4. **Send Email**: Generate and send styled email
+
+### Email Batching
+
+```python
+class MissedMessageWorker(QueueProcessingWorker):
+    def __init__(self) -> None:
+        self.batch_duration = timedelta(minutes=2)
+        self.pending_messages: dict[int, list[dict]] = {}
+    
+    def consume(self, event: dict) -> None:
+        user_id = event['user_profile_id']
+        
+        # Add to batch
+        if user_id not in self.pending_messages:
+            self.pending_messages[user_id] = []
+            # Schedule batch send
+            self.schedule_send(user_id, delay=self.batch_duration)
+        
+        self.pending_messages[user_id].append(event)
+    
+    def send_batch(self, user_id: int) -> None:
+        messages = self.pending_messages.pop(user_id, [])
+        
+        # Filter out read/deleted messages
+        messages = [
+            msg for msg in messages
+            if is_still_unread(msg) and not is_deleted(msg)
+        ]
+        
+        if messages:
+            send_batched_email(user_id, messages)
+```
+
+### Email Content
+
+Emails are styled similarly to GitHub notifications:
+
+```html
+<div class="email-container">
+  <h2>Missed messages in #announce</h2>
+  
+  <div class="message">
+    <div class="sender">Alice Smith</div>
+    <div class="content">
+      Check out the new API documentation!
+    </div>
+    <a href="https://zulip.example.com/#narrow/...">View in Zulip</a>
+  </div>
+  
+  <!-- More messages -->
+</div>
+```
+
+Emails support:
+- Reply-by-email via [incoming email gateway](https://zulip.readthedocs.io/en/latest/production/email-gateway.html)
+- Clean, readable formatting
+- Direct links to conversations
+
+## Mobile Push Notifications
+
+### Queue: missedmessage_mobile_notifications
+
+**Worker:** `PushNotificationsWorker` in `zerver/worker/missedmessage_mobile_notifications.py`
+
+**Flow:**
+
+1. **Immediate Processing**: No waiting period (unlike email)
+2. **Final Checks**:
+   - Is message still unread?
+   - Was message deleted?
+   - Are push notifications still enabled?
+3. **Badge Count**: Calculate total unread count for app badge
+4. **Send Notification**: Send to APNs (iOS) or FCM (Android)
+
+### Push Notification Payload
+
+**iOS (APNs):**
+
+```json
+{
+  "aps": {
+    "alert": {
+      "title": "Alice in #announce",
+      "body": "Check out the new API documentation!"
+    },
+    "badge": 5,
+    "sound": "default",
+    "category": "MESSAGE"
+  },
+  "zulip": {
+    "message_id": 12345,
+    "recipient_type": "stream",
+    "stream_id": 9,
+    "topic": "API Updates"
+  }
+}
+```
+
+**Android (FCM):**
+
+```json
+{
+  "notification": {
+    "title": "Alice in #announce",
+    "body": "Check out the new API documentation!",
+    "tag": "stream-9"
+  },
+  "data": {
+    "message_id": "12345",
+    "recipient_type": "stream",
+    "stream_id": "9",
+    "topic": "API Updates",
+    "badge": "5"
+  }
+}
+```
+
+### Badge Count Management
+
+```python
+def get_badge_count(user_profile: UserProfile) -> int:
+    # Count total unread messages
+    return UserMessage.objects.filter(
+        user_profile=user_profile,
+        flags=~UserMessage.flags.read,
+    ).count()
+```
+
+The badge updates with each notification, showing the total unread count.
+
+### Push Notification Bouncer
+
+Self-hosted servers use Zulip's push notification bouncer service:
+
+```
+┌─────────────────┐
+│ Self-hosted      │
+│ Zulip Server     │
+└────────┬────────┘
+         │
+         │ Forward notification
+         ▼
+┌─────────────────┐
+│ Zulip Push       │
+│ Bouncer Service  │
+└────────┬────────┘
+         │
+         ├──────────────┐
+         │               │
+         ▼               ▼
+┌──────────┐  ┌──────────┐
+│ APNs      │  │ FCM       │
+│ (iOS)     │  │ (Android) │
+└──────────┘  └──────────┘
+```
+
+This allows self-hosted installations to send push notifications without managing APNs/FCM certificates.
+
+## Desktop Notifications
+
+Desktop notifications are handled entirely client-side:
+
+```javascript
+// web/src/notifications.js
+function process_notification(message) {
+    // Check message flags
+    if (message.flags.includes("mentioned") || 
+        message.flags.includes("wildcard_mentioned")) {
+        
+        // Check user settings
+        if (page_params.enable_desktop_notifications) {
+            show_desktop_notification({
+                title: `${message.sender_full_name} in ${message.stream}`,
+                body: message.content,
+                icon: message.avatar_url,
+                tag: `message-${message.id}`,
+            });
+        }
+    }
+}
+```
+
+No server-side queuing needed - the client decides immediately based on:
+- Message flags (mentions, alert words, etc.)
+- User notification settings
+- Browser notification permissions
+
+## Notification Settings
+
+Users can configure notifications with granular control:
+
+### Per-Stream Settings
+
+```python
+class Subscription(models.Model):
+    # Email notifications for this stream
+    email_notifications = models.BooleanField(default=False)
+    
+    # Push notifications for this stream
+    push_notifications = models.BooleanField(default=False)
+    
+    # Desktop notifications for this stream
+    desktop_notifications = models.BooleanField(default=False)
+```
+
+### Global Settings
+
+```python
+class UserProfile(models.Model):
+    # Wildcard mention notifications
+    wildcard_mentions_notify = models.BooleanField(default=True)
+    
+    # Enable online push notifications
+    enable_online_push_notifications = models.BooleanField(default=False)
+    
+    # Email notification batching duration
+    email_notifications_batching_period_seconds = models.IntegerField(
+        default=120  # 2 minutes
+    )
+```
+
+## Message Editing and Notifications
+
+When messages are edited, notifications may need to be sent:
+
+```python
+def maybe_enqueue_notifications_for_message_update(
+    message: Message,
+    prior_mention_user_ids: set[int],
+    new_mention_user_ids: set[int],
+) -> None:
+    # Users newly mentioned
+    newly_mentioned = new_mention_user_ids - prior_mention_user_ids
+    
+    for user_id in newly_mentioned:
+        # Send notification for the edit
+        if should_notify_for_edit(user_id, message):
+            queue_event_on_commit(
+                "missedmessage_mobile_notifications",
+                {
+                    "user_profile_id": user_id,
+                    "message_id": message.id,
+                    "trigger": "edited_message_mentioned",
+                }
+            )
+```
+
+Notifications are NOT sent if:
+- User already received a notification for this message
+- User has read the message
+- Message was deleted
+
+## Testing Notifications
+
+Zulip has extensive test coverage for notifications:
+
+```python
+class TestMissedMessageNotifications(ZulipTestCase):
+    def test_mention_triggers_notification(self) -> None:
+        # Send message with mention
+        self.send_stream_message(
+            sender=self.example_user("othello"),
+            stream_name="Denmark",
+            content="@**Hamlet** check this out",
+        )
+        
+        # Verify notification was queued
+        hamlet = self.example_user("hamlet")
+        self.assertEqual(
+            len(self.get_queued_events("missedmessage_emails")),
+            1
+        )
+```
+
+Tests cover:
+- Mention notifications
+- Alert word notifications  
+- Wildcard mention notifications
+- Stream notification settings
+- Edit-triggered notifications
+- Notification filtering (read messages, deleted messages)
+
+## Performance Considerations
+
+### Bulk Operations
+
+When sending to many users, batch database queries:
+
+```python
+# Bad: N queries
+for user_id in user_ids:
+    user = UserProfile.objects.get(id=user_id)
+    if should_notify(user):
+        queue_notification(user)
+
+# Good: 1 query
+users = UserProfile.objects.filter(id__in=user_ids)
+for user in users:
+    if should_notify(user):
+        queue_notification(user)
+```
+
+### Tornado Performance
+
+<Warning>
+Tornado is asynchronous and shouldn't do database queries. All DB lookups must happen in `do_send_messages` or queue processors.
+</Warning>
+
+### Queue Processing Rate
+
+Monitor queue lengths to ensure processors keep up:
+
+```bash
+# Check queue depth
+sudo rabbitmqctl list_queues | grep missedmessage
+
+# If backed up, add more workers
+supervisorctl start zulip_processor_missedmessage_emails:*
+```
+
+## Debugging
+
+### Check Notification Configuration
+
+```python
+# Django shell
+from zerver.models import UserProfile
+user = UserProfile.objects.get(email="user@example.com")
+
+print(f"Email notifications: {user.enable_stream_email_notifications}")
+print(f"Push notifications: {user.enable_stream_push_notifications}")
+print(f"Online push: {user.enable_online_push_notifications}")
+```
+
+### View Queued Events
+
+```bash
+# Check email queue
+./manage.py shell -c "
+from zerver.lib.queue import SimpleQueueClient
+client = SimpleQueueClient()
+print(client.json_get('missedmessage_emails'))
+"
+```
+
+### Test Notification Delivery
+
+```python
+# Send test notification
+from zerver.lib.push_notifications import send_test_push_notification
+
+user = UserProfile.objects.get(email="user@example.com")
+send_test_push_notification(user, "Test notification")
+```
+
+## Best Practices
+
+1. **Check user settings**: Always verify notifications are enabled before queuing
+2. **Respect user presence**: Don't spam users who are actively using Zulip
+3. **Batch when possible**: Email batching reduces inbox clutter
+4. **Filter read messages**: Never notify about messages the user already read
+5. **Test thoroughly**: Notifications are critical for user experience
+6. **Monitor queues**: Long queues indicate delivery problems
+7. **Handle errors gracefully**: Log failures but don't lose notifications
+
+## Related Resources
+
+- [Sending Messages](https://zulip.readthedocs.io/en/latest/subsystems/sending-messages.html)
+- [Events System](https://zulip.readthedocs.io/en/latest/subsystems/events-system.html)
+- [Queue Processors](/guides/subsystems/queuing)
+- [Mobile Push Notifications](https://zulip.readthedocs.io/en/latest/production/mobile-push-notifications.html)

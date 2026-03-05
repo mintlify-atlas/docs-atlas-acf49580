@@ -1,0 +1,488 @@
+---
+title: Django Application Structure
+description: Understanding Zulip's Django backend architecture and organization
+---
+
+Zulip's backend is built with Django, organized into a clear structure that separates concerns and makes the codebase easy to navigate.
+
+## Directory Structure
+
+The main backend code lives in the `zerver/` directory:
+
+```
+zerver/
+  ├── actions/          # Business logic and state changes
+  ├── lib/             # Utility libraries and helpers
+  ├── models/          # Database models
+  ├── views/           # API endpoints and HTTP views
+  ├── tornado/         # Tornado event server code
+  ├── webhooks/        # Incoming webhook integrations
+  ├── worker/          # Queue consumer workers
+  ├── tests/           # Backend test suite
+  ├── management/      # Django management commands
+  ├── migrations/      # Database migration files
+  ├── openapi/         # OpenAPI/REST API documentation
+  └── data_import/     # Tools for importing from other chat systems
+```
+
+## Models (`zerver/models/`)
+
+Database models define the structure of data in PostgreSQL.
+
+### Key Model Files
+
+**`realms.py`**
+- `Realm` - An organization/workspace
+- Realm settings and configuration
+- Realm-level permissions
+
+**`users.py`**
+- `UserProfile` - A user account
+- User preferences and settings
+- Authentication and permissions
+
+**`streams.py`**
+- `Stream` - A channel for group conversations
+- `Subscription` - A user's subscription to a stream
+- Stream permissions and settings
+
+**`messages.py`**
+- `Message` - A chat message
+- `Reaction` - Emoji reactions on messages
+- `Attachment` - File attachments
+
+### Model Example
+
+```python
+# zerver/models/realms.py
+class Realm(models.Model):
+    name = models.CharField(max_length=40)
+    string_id = models.CharField(max_length=40, unique=True)
+    date_created = models.DateTimeField(default=timezone_now)
+    
+    # Settings
+    allow_message_editing = models.BooleanField(default=True)
+    message_content_edit_limit_seconds = models.IntegerField(default=600)
+    
+    # ... many more fields
+    
+    def __str__(self) -> str:
+        return f"{self.name} ({self.string_id})"
+```
+
+<Note>
+Always use helper functions like `get_user_profile_by_id()` instead of direct model queries for better performance and caching.
+</Note>
+
+## Actions (`zerver/actions/`)
+
+The actions layer contains all business logic that modifies state. Every state change should go through an action function.
+
+### Why Actions?
+
+Actions ensure that when state changes:
+
+1. **Database is updated** correctly
+2. **Events are sent** to notify clients
+3. **Caches are invalidated** appropriately
+4. **Side effects happen** (e.g., sending emails)
+5. **Changes are atomic** within transactions
+
+### Key Action Files
+
+**`message_send.py`**
+
+```python
+def check_message(
+    sender: UserProfile,
+    client: Client,
+    message_type_name: str,
+    message_to: Sequence[int],
+    topic_name: Optional[str],
+    message_content: str,
+) -> int:
+    """Send a message, returning the message ID."""
+    # Validate input
+    # Save to database  
+    # Send events to clients
+    # Return message ID
+```
+
+**`realm_settings.py`**
+- `do_set_realm_property()` - Update realm settings
+- `do_set_realm_authentication_methods()` - Update auth methods
+- `do_deactivate_realm()` - Deactivate an organization
+
+**`user_settings.py`**
+- `do_change_user_setting()` - Update user preferences
+- `do_change_avatar_fields()` - Update user avatar
+- `do_change_full_name()` - Update user's display name
+
+### Action Pattern
+
+Actions typically follow this pattern:
+
+```python
+def do_something(user: UserProfile, new_value: str) -> None:
+    # 1. Validate input
+    if not is_valid(new_value):
+        raise JsonableError("Invalid value")
+    
+    # 2. Update database
+    user.some_field = new_value
+    user.save(update_fields=["some_field"])
+    
+    # 3. Invalidate caches
+    flush_user(user)
+    
+    # 4. Send event to clients
+    event = dict(
+        type="user_settings",
+        property="some_field",
+        value=new_value,
+    )
+    send_event_on_commit(user.realm, event, [user.id])
+    
+    # 5. Trigger side effects (if needed)
+    # e.g., send email, log audit event, etc.
+```
+
+<Warning>
+Never modify database models directly in views. Always use action functions to ensure events are sent and caches are invalidated.
+</Warning>
+
+## Views (`zerver/views/`)
+
+Views handle HTTP requests and responses. They validate input, call action functions, and return JSON or HTML.
+
+### Key View Files
+
+**`messages.py`**
+- `send_message_backend()` - POST /json/messages
+- `get_messages_backend()` - GET /json/messages
+- `update_message_backend()` - PATCH /json/messages/:message_id
+
+**`streams.py`**
+- `add_subscriptions_backend()` - Subscribe users to channels
+- `remove_subscriptions_backend()` - Unsubscribe users
+- `update_stream_backend()` - Update channel settings
+
+**`users.py`**
+- `update_user_backend()` - Update user settings
+- `deactivate_user_own_backend()` - Deactivate own account
+- `update_status_backend()` - Update user status
+
+### View Example
+
+```python
+# zerver/views/messages.py
+@has_request_variables
+def send_message_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    message_type_name: str = REQ("type"),
+    req_to: str = REQ("to"),
+    topic_name: Optional[str] = REQ_topic(),
+    message_content: str = REQ("content"),
+) -> HttpResponse:
+    # Validate and parse input
+    message_to = extract_recipients(req_to)
+    
+    # Call action function
+    message_id = check_message(
+        sender=user_profile,
+        client=get_client(request.user_agent),
+        message_type_name=message_type_name,
+        message_to=message_to,
+        topic_name=topic_name,
+        message_content=message_content,
+    )
+    
+    # Return response
+    return json_success(request, data={"id": message_id})
+```
+
+### View Decorators
+
+Zulip uses decorators for common patterns:
+
+**Authentication:**
+```python
+@authenticated_json_view
+def my_view(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
+    # user_profile is automatically provided and authenticated
+```
+
+**Request Variables:**
+```python
+@has_request_variables
+def my_view(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    stream_id: int = REQ(json_validator=check_int),
+    topic: str = REQ_topic(),
+) -> HttpResponse:
+    # Parameters automatically extracted and validated
+```
+
+**Permissions:**
+```python
+@require_realm_admin
+def admin_only_view(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
+    # Only realm admins can access this view
+```
+
+## Libraries (`zerver/lib/`)
+
+Utility functions and helpers used throughout the codebase.
+
+### Key Library Files
+
+**`actions.py`**
+- Core action helpers
+- Bulk operations
+
+**`events.py`**
+- Event generation and distribution
+- `send_event_on_commit()` function
+- State fetching for new clients
+
+**`markdown/`**
+- Markdown processing
+- Link previews
+- Mention detection
+- Code highlighting
+
+**`validator.py`**
+- Input validation helpers
+- Type checkers
+- `check_int()`, `check_bool()`, `check_string()`, etc.
+
+**`response.py`**
+- `json_success()` - Return success JSON response
+- `json_error()` - Return error JSON response
+
+**`cache.py` and `cache_helpers.py`**
+- Caching utilities
+- Cache invalidation
+- Generic cache fetch functions
+
+**`email.py`**
+- Email sending
+- Email templates
+- Email scheduling
+
+## Queue Workers (`zerver/worker/`)
+
+Background workers process asynchronous tasks from RabbitMQ queues.
+
+### Key Workers
+
+**`queue_processors.py`**
+
+Defines all queue consumer classes:
+
+```python
+class EmailSendingWorker(QueueProcessingWorker):
+    def consume(self, event: Dict[str, Any]) -> None:
+        # Send an email
+        send_email(**event)
+
+class MissedMessageWorker(QueueProcessingWorker):
+    def consume(self, event: Dict[str, Any]) -> None:
+        # Send missed message notifications
+        handle_missedmessage_emails(event)
+```
+
+**Common Queue Workers:**
+- `email_senders` - Send outgoing emails
+- `missedmessage_emails` - Send missed message notifications
+- `missedmessage_mobile_notifications` - Send push notifications
+- `digest_emails` - Generate and send digest emails
+- `embed_links` - Fetch and embed link previews
+- `outgoing_webhooks` - Send outgoing webhook requests
+
+## Webhooks (`zerver/webhooks/`)
+
+Integrations that receive webhooks from external services.
+
+### Structure
+
+Each webhook integration has its own directory:
+
+```
+zerver/webhooks/
+  ├── github/
+  │   ├── view.py           # Webhook handler
+  │   ├── fixtures/         # Test fixtures
+  │   │   ├── push.json
+  │   │   └── issues.json
+  │   └── tests.py          # Tests
+  ├── gitlab/
+  ├── jira/
+  └── ... (100+ integrations)
+```
+
+### Webhook Example
+
+```python
+# zerver/webhooks/github/view.py
+@webhook_view("GitHub")
+@has_request_variables
+def api_github_webhook(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    payload: Dict[str, Any] = REQ(argument_type="body"),
+) -> HttpResponse:
+    event_type = request.META["HTTP_X_GITHUB_EVENT"]
+    
+    if event_type == "push":
+        body = get_push_commits_body(payload)
+        topic = get_push_topic(payload)
+    elif event_type == "issues":
+        body = get_issue_body(payload)
+        topic = get_issue_topic(payload)
+    # ... handle other event types
+    
+    check_send_webhook_message(
+        request, user_profile, topic, body
+    )
+    
+    return json_success(request)
+```
+
+## Tests (`zerver/tests/`)
+
+Comprehensive test suite with ~98% code coverage.
+
+### Test Organization
+
+```
+zerver/tests/
+  ├── test_messages.py      # Message sending/receiving
+  ├── test_streams.py       # Channel operations
+  ├── test_users.py         # User management
+  ├── test_events.py        # Event system
+  ├── test_realm.py         # Realm settings
+  └── ... (200+ test files)
+```
+
+See [Backend Testing](/development/testing/backend) for details.
+
+## Database Migrations (`zerver/migrations/`)
+
+Django migrations track database schema changes.
+
+### Creating a Migration
+
+```bash
+# After modifying models
+./manage.py makemigrations
+
+# Apply migrations
+./manage.py migrate
+```
+
+See the [schema migrations guide](/development/schema-migrations) for best practices.
+
+## URL Routing (`zproject/urls.py`)
+
+Defines URL patterns and routes them to views.
+
+```python
+# zproject/urls.py
+urlpatterns = [
+    path("json/messages", views.messages.send_message_backend),
+    path("json/messages/<int:message_id>", views.messages.update_message_backend),
+    path("json/users", views.users.get_users_backend),
+    # ... hundreds more routes
+]
+```
+
+## Settings (`zproject/`)
+
+Django settings and configuration.
+
+**Key files:**
+- `settings.py` - Main settings
+- `dev_settings.py` - Development overrides
+- `computed_settings.py` - Computed/derived settings
+- `config.py` - Secrets management
+
+## Best Practices
+
+### Separation of Concerns
+
+<Steps>
+  <Step title="Views validate input">
+    Extract and validate request parameters
+  </Step>
+  <Step title="Actions modify state">
+    Update database, send events, invalidate caches
+  </Step>
+  <Step title="Models define structure">
+    Database schema and basic queries
+  </Step>
+  <Step title="Libraries provide utilities">
+    Reusable helpers and common operations
+  </Step>
+</Steps>
+
+### Always Use Actions
+
+```python
+# Bad - modifying model directly
+user.email = new_email
+user.save()
+
+# Good - using action function
+do_change_user_email(user, new_email)
+```
+
+### Use Type Hints
+
+Zulip uses mypy for type checking:
+
+```python
+def send_message(
+    user: UserProfile,
+    content: str,
+    stream_id: int,
+) -> int:
+    # Type hints help catch bugs and document code
+    ...
+```
+
+### Write Tests
+
+Every feature should have tests:
+
+```python
+class MessageSendTest(ZulipTestCase):
+    def test_send_stream_message(self) -> None:
+        self.login("hamlet")
+        result = self.send_stream_message(
+            self.example_user("hamlet"),
+            "Denmark",
+            "test topic",
+            "test content",
+        )
+        self.assert_json_success(result)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Frontend Architecture" icon="browser" href="/development/architecture/frontend">
+    Learn about the web frontend
+  </Card>
+  <Card title="Real-time Events" icon="bolt" href="/development/architecture/realtime-events">
+    Understand the event system
+  </Card>
+  <Card title="Backend Testing" icon="flask" href="/development/testing/backend">
+    Write backend tests
+  </Card>
+  <Card title="New Feature Tutorial" icon="wand-magic-sparkles" href="/development/tutorials/new-feature">
+    Add a complete feature
+  </Card>
+</CardGroup>

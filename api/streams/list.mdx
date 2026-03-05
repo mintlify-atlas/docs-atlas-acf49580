@@ -1,0 +1,298 @@
+---
+title: 'List Channels'
+description: 'GET /api/v1/streams - Get all channels the user has access to'
+---
+
+## Endpoint
+
+```
+GET /api/v1/streams
+```
+
+Get all channels (streams) that the user has access to.
+
+## Request Parameters
+
+<ParamField query="include_public" type="boolean" default="true">
+  Include all public channels.
+</ParamField>
+
+<ParamField query="include_web_public" type="boolean" default="false">
+  Include all web-public channels.
+</ParamField>
+
+<ParamField query="include_subscribed" type="boolean" default="true">
+  Include all channels that the user is subscribed to.
+</ParamField>
+
+<ParamField query="include_all" type="boolean" default="false">
+  Include all channels the user has metadata access to.
+  
+  For administrators, this includes all channels in the organization.
+  
+  **Added in Zulip 10.0 (feature level 356)**
+</ParamField>
+
+<ParamField query="include_default" type="boolean" default="false">
+  Include all default channels for new users.
+</ParamField>
+
+<ParamField query="include_owner_subscribed" type="boolean" default="false">
+  If the user is a bot, include all channels the bot's owner is subscribed to.
+</ParamField>
+
+<ParamField query="include_can_access_content" type="boolean" default="false">
+  Include all channels the user has content access to.
+  
+  **Added in Zulip 10.0 (feature level 356)**
+</ParamField>
+
+<ParamField query="exclude_archived" type="boolean" default="true">
+  Whether to exclude archived channels from the results.
+  
+  **Added in Zulip 10.0 (feature level 315)**
+</ParamField>
+
+## Response
+
+<ResponseField name="streams" type="array" required>
+  Array of channel objects.
+</ResponseField>
+
+### Channel Object
+
+<ResponseField name="stream_id" type="integer">
+  Unique channel ID.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Channel name.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Channel description.
+</ResponseField>
+
+<ResponseField name="invite_only" type="boolean">
+  Whether the channel is private.
+</ResponseField>
+
+<ResponseField name="is_web_public" type="boolean">
+  Whether the channel is web-public.
+</ResponseField>
+
+<ResponseField name="is_archived" type="boolean">
+  Whether the channel is archived.
+</ResponseField>
+
+<ResponseField name="date_created" type="integer">
+  Unix timestamp when the channel was created.
+</ResponseField>
+
+<ResponseField name="creator_id" type="integer">
+  User ID of the channel creator.
+</ResponseField>
+
+<ResponseField name="subscriber_count" type="integer">
+  Number of subscribers.
+</ResponseField>
+
+<ResponseField name="stream_weekly_traffic" type="integer">
+  Average weekly message count.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL - All Channels
+curl -X GET https://your-domain.zulipchat.com/api/v1/streams \
+  -u email@example.com:API_KEY
+```
+
+```bash cURL - Public Only
+curl -X GET 'https://your-domain.zulipchat.com/api/v1/streams?include_public=true&include_subscribed=false' \
+  -u email@example.com:API_KEY
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Get all accessible channels
+result = client.get_streams()
+
+for stream in result['streams']:
+    print(f"{stream['name']} (ID: {stream['stream_id']})")
+    print(f"  Description: {stream['description']}")
+    print(f"  Subscribers: {stream.get('subscriber_count', 'N/A')}")
+    print()
+
+# Get only public channels
+result = client.get_streams(include_subscribed=False)
+
+# Get all channels (admin only)
+result = client.get_streams(include_all=True)
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Get all channels
+const result = await client.streams.retrieve();
+console.log(result.streams);
+
+// Get only public channels
+const publicStreams = await client.streams.retrieve({
+  include_subscribed: false
+});
+```
+
+</CodeGroup>
+
+## Response Example
+
+<ResponseExample>
+
+```json Success
+{
+  "result": "success",
+  "msg": "",
+  "streams": [
+    {
+      "stream_id": 1,
+      "name": "general",
+      "description": "General discussion",
+      "rendered_description": "<p>General discussion</p>",
+      "invite_only": false,
+      "is_web_public": false,
+      "is_archived": false,
+      "date_created": 1691057093,
+      "creator_id": 1,
+      "history_public_to_subscribers": true,
+      "first_message_id": 100,
+      "folder_id": 1,
+      "is_recently_active": true,
+      "message_retention_days": null,
+      "stream_post_policy": 1,
+      "subscriber_count": 42,
+      "stream_weekly_traffic": 150,
+      "can_add_subscribers_group": 2,
+      "can_remove_subscribers_group": 2,
+      "can_subscribe_group": 2
+    },
+    {
+      "stream_id": 5,
+      "name": "engineering",
+      "description": "Engineering team discussions",
+      "rendered_description": "<p>Engineering team discussions</p>",
+      "invite_only": true,
+      "is_web_public": false,
+      "is_archived": false,
+      "date_created": 1691058000,
+      "creator_id": 2,
+      "history_public_to_subscribers": true,
+      "first_message_id": 500,
+      "folder_id": 1,
+      "is_recently_active": true,
+      "message_retention_days": null,
+      "stream_post_policy": 1,
+      "subscriber_count": 15,
+      "stream_weekly_traffic": 87,
+      "can_add_subscribers_group": 2,
+      "can_remove_subscribers_group": 2,
+      "can_subscribe_group": 2
+    }
+  ]
+}
+```
+
+</ResponseExample>
+
+## Channel Types
+
+<AccordionGroup>
+  <Accordion title="Public Channels">
+    Visible to all organization members. Anyone can subscribe and view messages.
+    
+    - `invite_only: false`
+    - `is_web_public: false`
+    - Discoverable by all users
+  </Accordion>
+  
+  <Accordion title="Private Channels">
+    Only visible to subscribed users and administrators.
+    
+    - `invite_only: true`
+    - Requires invitation to join
+    - History not visible to non-subscribers
+  </Accordion>
+  
+  <Accordion title="Web-Public Channels">
+    Accessible to anyone on the internet without logging in.
+    
+    - `is_web_public: true`
+    - Content indexed by search engines
+    - Great for open source projects
+  </Accordion>
+  
+  <Accordion title="Archived Channels">
+    No longer active but retain message history.
+    
+    - `is_archived: true`
+    - Cannot send new messages
+    - Excluded by default
+  </Accordion>
+</AccordionGroup>
+
+## Filtering Channels
+
+```python Filter Examples
+# Only subscribed channels
+subscribed = client.get_streams(
+    include_public=False,
+    include_subscribed=True
+)
+
+# Only public channels
+public = client.get_streams(
+    include_public=True,
+    include_subscribed=False
+)
+
+# Include archived channels
+all_streams = client.get_streams(
+    exclude_archived=False
+)
+
+# Default channels
+defaults = client.get_streams(
+    include_default=True
+)
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Subscribed Channels" icon="user-check" href="/api/streams/subscribe">
+    List user's subscribed channels
+  </Card>
+  <Card title="Create Channel" icon="plus" href="/api/streams/create">
+    Create a new channel
+  </Card>
+  <Card title="Update Channel" icon="pen" href="/api/streams/update">
+    Modify channel settings
+  </Card>
+  <Card title="Get Topics" icon="list" href="/api/streams/topics">
+    List topics in a channel
+  </Card>
+</CardGroup>

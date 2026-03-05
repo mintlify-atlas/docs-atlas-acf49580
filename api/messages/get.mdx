@@ -1,0 +1,415 @@
+---
+title: 'Get Messages'
+description: 'GET /api/v1/messages - Fetch messages from Zulip'
+---
+
+## Endpoint
+
+```
+GET /api/v1/messages
+```
+
+Fetch messages from Zulip. This is the primary endpoint used by all official Zulip clients (web, desktop, mobile, terminal) to retrieve messages.
+
+## Overview
+
+Most queries specify a [narrow filter](/api/construct-narrow) to fetch messages matching a search query. If not specified, returns messages from the user's combined feed.
+
+You can fetch messages in two ways:
+
+1. **Range-based**: Specify an anchor message ID and fetch messages before/after it
+2. **ID-based**: Provide specific message IDs to fetch (Zulip 10.0+)
+
+<Warning>
+  Request at most 1000 messages per batch. Maximum is 5000 messages per request.
+</Warning>
+
+## Request Parameters
+
+<ParamField query="anchor" type="string | integer" default="newest">
+  The message ID to anchor fetching. Can be an integer ID or special string:
+  
+  - `"newest"` - The most recent message
+  - `"oldest"` - The oldest message
+  - `"first_unread"` - The oldest unread message (or newest if all read)
+  - `"date"` - First message on/after `anchor_date`
+  - Integer message ID
+</ParamField>
+
+<ParamField query="num_before" type="integer" default="0">
+  Number of messages with IDs less than the anchor to retrieve.
+  
+  Required if `message_ids` is not provided.
+</ParamField>
+
+<ParamField query="num_after" type="integer" default="0">
+  Number of messages with IDs greater than the anchor to retrieve.
+  
+  Required if `message_ids` is not provided.
+</ParamField>
+
+<ParamField query="narrow" type="array" default="[]">
+  The narrow filter to apply. See [constructing a narrow](/api/construct-narrow) for details.
+  
+  Examples:
+  - Channel: `[{"operator": "channel", "operand": "general"}]`
+  - Topic: `[{"operator": "topic", "operand": "API"}]`
+  - Sender: `[{"operator": "sender", "operand": "user@example.com"}]`
+  - Search: `[{"operator": "search", "operand": "keyword"}]`
+</ParamField>
+
+<ParamField query="include_anchor" type="boolean" default="true">
+  Whether to include the anchor message in results.
+  
+  **Added in Zulip 6.0 (feature level 155)**
+</ParamField>
+
+<ParamField query="anchor_date" type="string">
+  The date/datetime for finding the anchor when `anchor="date"`.
+  
+  Formats:
+  - ISO 8601 date: `"2024-03-15"`
+  - ISO 8601 datetime: `"2024-03-15T12:30:00Z"`
+  
+  **Added in Zulip 12.0 (feature level 445)**
+</ParamField>
+
+<ParamField query="message_ids" type="array">
+  Specific message IDs to fetch. Returns only messages that exist and are accessible.
+  
+  Cannot be used with anchor/num_before/num_after parameters.
+  
+  Example: `[123, 456, 789]`
+  
+  **Added in Zulip 10.0 (feature level 300)**
+</ParamField>
+
+<ParamField query="client_gravatar" type="boolean" default="false">
+  Whether to use client-side Gravatar rendering.
+</ParamField>
+
+<ParamField query="apply_markdown" type="boolean" default="true">
+  If `true`, message content is in rendered HTML.
+  If `false`, content is in raw Markdown.
+</ParamField>
+
+<ParamField query="allow_empty_topic_name" type="boolean" default="false">
+  Whether the client supports empty string as a topic name.
+  
+  **Added in Zulip 10.0 (feature level 334)**
+</ParamField>
+
+## Response
+
+<ResponseField name="messages" type="array" required>
+  Array of message objects matching the query.
+</ResponseField>
+
+<ResponseField name="anchor" type="integer">
+  The anchor used (computed if a string was provided).
+</ResponseField>
+
+<ResponseField name="found_newest" type="boolean">
+  Whether the results include the newest message matching the narrow.
+</ResponseField>
+
+<ResponseField name="found_oldest" type="boolean">
+  Whether the results include the oldest message matching the narrow.
+</ResponseField>
+
+<ResponseField name="found_anchor" type="boolean">
+  Whether the anchor message is included in results.
+</ResponseField>
+
+<ResponseField name="history_limited" type="boolean">
+  Whether message history was limited due to plan restrictions.
+</ResponseField>
+
+### Message Object
+
+<ResponseField name="id" type="integer">
+  Unique message ID.
+</ResponseField>
+
+<ResponseField name="sender_id" type="integer">
+  User ID of the sender.
+</ResponseField>
+
+<ResponseField name="sender_full_name" type="string">
+  Full name of the sender.
+</ResponseField>
+
+<ResponseField name="sender_email" type="string">
+  Email of the sender.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  Message content (HTML if `apply_markdown=true`, Markdown otherwise).
+</ResponseField>
+
+<ResponseField name="timestamp" type="integer">
+  Unix timestamp of when the message was sent.
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Message type: `"stream"` or `"private"`.
+</ResponseField>
+
+<ResponseField name="subject" type="string">
+  The topic (for channel messages).
+</ResponseField>
+
+<ResponseField name="stream_id" type="integer">
+  Channel ID (for channel messages).
+</ResponseField>
+
+<ResponseField name="display_recipient" type="string | array">
+  Channel name (string) for channel messages, or array of recipients for direct messages.
+</ResponseField>
+
+<ResponseField name="flags" type="array">
+  User's message flags: `["read", "starred", "mentioned"]`, etc.
+</ResponseField>
+
+<ResponseField name="reactions" type="array">
+  Emoji reactions on the message.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL - Get Latest Messages
+curl -X GET 'https://your-domain.zulipchat.com/api/v1/messages?anchor=newest&num_before=20&num_after=0' \
+  -u email@example.com:API_KEY
+```
+
+```bash cURL - Get Messages in Channel
+curl -G https://your-domain.zulipchat.com/api/v1/messages \
+  -u email@example.com:API_KEY \
+  -d 'anchor=newest' \
+  -d 'num_before=100' \
+  -d 'num_after=0' \
+  --data-urlencode 'narrow=[{"operator":"channel","operand":"general"}]'
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Get latest 50 messages
+result = client.get_messages({
+    "anchor": "newest",
+    "num_before": 50,
+    "num_after": 0
+})
+
+for msg in result['messages']:
+    print(f"{msg['sender_full_name']}: {msg['content']}")
+
+# Get messages in a specific channel
+result = client.get_messages({
+    "anchor": "newest",
+    "num_before": 100,
+    "num_after": 0,
+    "narrow": [{"operator": "channel", "operand": "general"}]
+})
+
+# Get messages from a topic
+result = client.get_messages({
+    "anchor": "newest",
+    "num_before": 100,
+    "num_after": 0,
+    "narrow": [
+        {"operator": "channel", "operand": "general"},
+        {"operator": "topic", "operand": "API Discussion"}
+    ]
+})
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Get latest 50 messages
+const params = {
+  anchor: 'newest',
+  num_before: 50,
+  num_after: 0
+};
+
+const result = await client.messages.retrieve(params);
+console.log(result.messages);
+
+// Get messages in a specific channel
+const channelParams = {
+  anchor: 'newest',
+  num_before: 100,
+  num_after: 0,
+  narrow: [{operator: 'channel', operand: 'general'}]
+};
+
+const channelMsgs = await client.messages.retrieve(channelParams);
+```
+
+</CodeGroup>
+
+## Response Example
+
+<ResponseExample>
+
+```json Success Response
+{
+  "result": "success",
+  "msg": "",
+  "anchor": 21,
+  "found_newest": true,
+  "found_oldest": false,
+  "found_anchor": true,
+  "history_limited": false,
+  "messages": [
+    {
+      "id": 16,
+      "sender_id": 4,
+      "sender_full_name": "Alice",
+      "sender_email": "alice@example.com",
+      "type": "private",
+      "subject": "",
+      "content": "<p>Hello! This is a direct message.</p>",
+      "content_type": "text/html",
+      "timestamp": 1527921326,
+      "display_recipient": [
+        {
+          "id": 4,
+          "email": "alice@example.com",
+          "full_name": "Alice"
+        },
+        {
+          "id": 5,
+          "email": "bob@example.com",
+          "full_name": "Bob"
+        }
+      ],
+      "flags": ["read"],
+      "reactions": []
+    },
+    {
+      "id": 21,
+      "sender_id": 4,
+      "sender_full_name": "Alice",
+      "sender_email": "alice@example.com",
+      "type": "stream",
+      "subject": "API Discussion",
+      "stream_id": 5,
+      "content": "<p>Check out the new Zulip API!</p>",
+      "content_type": "text/html",
+      "timestamp": 1527939746,
+      "display_recipient": "general",
+      "flags": ["read"],
+      "reactions": [
+        {
+          "emoji_name": "thumbs_up",
+          "emoji_code": "1f44d",
+          "reaction_type": "unicode_emoji",
+          "user_id": 5
+        }
+      ]
+    }
+  ]
+}
+```
+
+</ResponseExample>
+
+## Narrow Filters
+
+Common narrow filter examples:
+
+```json Channel Messages
+[{"operator": "channel", "operand": "general"}]
+```
+
+```json Topic in Channel
+[
+  {"operator": "channel", "operand": "general"},
+  {"operator": "topic", "operand": "API"}
+]
+```
+
+```json Messages from User
+[{"operator": "sender", "operand": "alice@example.com"}]
+```
+
+```json Direct Messages with User
+[{"operator": "dm", "operand": "alice@example.com"}]
+```
+
+```json Search Text
+[{"operator": "search", "operand": "zulip api"}]
+```
+
+```json Messages with Attachments
+[{"operator": "has", "operand": "attachment"}]
+```
+
+<Info>
+  See the complete [narrow filter documentation](/api/construct-narrow) for all operators.
+</Info>
+
+## Pagination
+
+To implement pagination:
+
+1. Start with `anchor="newest"` or a specific message ID
+2. Set `num_before` and `num_after` based on your page size
+3. Check `found_oldest` and `found_newest` to know if more messages exist
+4. Use the first/last message ID from results as the next anchor
+
+```python Pagination Example
+def get_all_messages_in_channel(client, channel_name):
+    messages = []
+    anchor = "newest"
+    
+    while True:
+        result = client.get_messages({
+            "anchor": anchor,
+            "num_before": 100,
+            "num_after": 0,
+            "narrow": [{"operator": "channel", "operand": channel_name}]
+        })
+        
+        messages.extend(result['messages'])
+        
+        if result['found_oldest']:
+            break
+            
+        # Use oldest message as next anchor
+        anchor = result['messages'][0]['id']
+    
+    return messages
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Send Message" icon="paper-plane" href="/api/messages/send">
+    Send a new message
+  </Card>
+  <Card title="Update Message" icon="pen" href="/api/messages/update">
+    Edit an existing message
+  </Card>
+  <Card title="Delete Message" icon="trash" href="/api/messages/delete">
+    Delete a message
+  </Card>
+  <Card title="Real-time Events" icon="bolt" href="/api/events/register">
+    Subscribe to new messages via events
+  </Card>
+</CardGroup>

@@ -1,0 +1,265 @@
+---
+title: 'Send a Message'
+description: 'POST /api/v1/messages - Send channel or direct messages'
+---
+
+## Endpoint
+
+```
+POST /api/v1/messages
+```
+
+Send a [channel message](/help/introduction-to-topics) or a [direct message](/help/direct-messages).
+
+## Request Parameters
+
+<ParamField body="type" type="string" required>
+  The type of message to send.
+  
+  - `"stream"` or `"channel"` for a channel message
+  - `"direct"` or `"private"` for a direct message
+  
+  **Note**: `"channel"` was added in Zulip 9.0, and `"direct"` was added in Zulip 7.0 as the modern conventions.
+</ParamField>
+
+<ParamField body="to" type="string | integer | array" required>
+  The message recipient(s).
+  
+  For **channel messages**:
+  - Channel name (string): `"general"`
+  - Channel ID (integer): `42`
+  
+  For **direct messages**:
+  - Array of user IDs: `[9, 10]`
+  - Array of email addresses: `["user1@example.com", "user2@example.com"]`
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  The message content in Zulip-flavored Markdown.
+  
+  Maximum length is determined by the `max_message_length` setting (default: 10000 characters).
+</ParamField>
+
+<ParamField body="topic" type="string">
+  The topic for the message. **Required for channel messages**, ignored for direct messages.
+  
+  Maximum length is determined by `max_topic_length` (default: 60 characters).
+</ParamField>
+
+<ParamField body="queue_id" type="string">
+  For clients supporting [local echo](https://zulip.readthedocs.io/en/latest/subsystems/sending-messages.html#local-echo), the event queue ID.
+  
+  Must be used with `local_id`.
+</ParamField>
+
+<ParamField body="local_id" type="string">
+  For clients supporting local echo, a unique identifier chosen by the client.
+  
+  Must be used with `queue_id`.
+</ParamField>
+
+<ParamField body="read_by_sender" type="boolean" default="varies">
+  Whether the message should be marked as read by the sender.
+  
+  If not specified, the server uses a heuristic based on the client name.
+  
+  **Added in Zulip 8.0 (feature level 236)**
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="integer" required>
+  The unique ID assigned to the sent message.
+</ResponseField>
+
+<ResponseField name="automatic_new_visibility_policy" type="integer">
+  If present, indicates the user's visibility policy for the topic was automatically changed.
+  
+  Possible values:
+  - `2` - Unmuted
+  - `3` - Followed
+  
+  **Added in Zulip 8.0 (feature level 218)**
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL - Channel Message
+curl -X POST https://your-domain.zulipchat.com/api/v1/messages \
+  -u email@example.com:API_KEY \
+  --data-urlencode type=stream \
+  --data-urlencode 'to="general"' \
+  --data-urlencode topic="API Test" \
+  --data-urlencode 'content=Hello from the Zulip API!'
+```
+
+```bash cURL - Direct Message
+curl -X POST https://your-domain.zulipchat.com/api/v1/messages \
+  -u email@example.com:API_KEY \
+  --data-urlencode type=direct \
+  --data-urlencode 'to=[9, 10]' \
+  --data-urlencode 'content=Hi there! This is a direct message.'
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Send a channel message
+result = client.send_message({
+    "type": "stream",
+    "to": "general",
+    "topic": "API Test",
+    "content": "Hello from Python!"
+})
+
+print(result)
+# {'result': 'success', 'msg': '', 'id': 42}
+
+# Send a direct message
+result = client.send_message({
+    "type": "direct",
+    "to": [9, 10],
+    "content": "Hi there! This is a direct message."
+})
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Send a channel message
+const streamParams = {
+  type: 'stream',
+  to: 'general',
+  topic: 'API Test',
+  content: 'Hello from JavaScript!'
+};
+
+const result = await client.messages.send(streamParams);
+console.log(result);
+
+// Send a direct message
+const dmParams = {
+  type: 'direct',
+  to: [9, 10],
+  content: 'Hi there! This is a direct message.'
+};
+
+const dmResult = await client.messages.send(dmParams);
+```
+
+</CodeGroup>
+
+## Response Examples
+
+<ResponseExample>
+
+```json Success Response
+{
+  "result": "success",
+  "msg": "",
+  "id": 42,
+  "automatic_new_visibility_policy": 2
+}
+```
+
+```json Error - Invalid Stream
+{
+  "result": "error",
+  "msg": "Stream 'nonexistent' does not exist",
+  "code": "STREAM_DOES_NOT_EXIST"
+}
+```
+
+```json Error - Invalid User
+{
+  "result": "error",
+  "msg": "Invalid email 'invalid@example.com'",
+  "code": "BAD_REQUEST"
+}
+```
+
+```json Error - Wildcard Mention Permission
+{
+  "result": "error",
+  "msg": "You do not have permission to use channel wildcard mentions in this channel.",
+  "code": "STREAM_WILDCARD_MENTION_NOT_ALLOWED"
+}
+```
+
+</ResponseExample>
+
+## Message Formatting
+
+Zulip uses a modified version of Markdown. You can:
+
+- **Bold**: `**bold**`
+- **Italic**: `*italic*`
+- **Code**: `` `code` ``
+- **Links**: `[text](https://example.com)`
+- **Mentions**: `@**username**` or `@**all**`
+- **Emoji**: `:smile:` → 😄
+- **LaTeX**: `$$E = mc^2$$`
+
+```markdown Example Message
+Hey @**Alice**! Check out this code:
+
+```python
+def hello():
+    print("Hello, Zulip!")
+```
+
+More info: https://zulip.com
+```
+
+<Info>
+  See [Message Formatting](/help/format-your-message-using-markdown) for complete Markdown syntax.
+</Info>
+
+## Channel vs Stream Terminology
+
+Zulip is transitioning from "stream" to "channel" terminology:
+
+- Modern clients should use `"type": "channel"`
+- Legacy `"type": "stream"` is still supported
+- Both parameters work identically
+
+## Permissions
+
+To send messages, users must:
+
+- Have access to the channel (for channel messages)
+- Have permission to send messages to the channel (controlled by `can_send_message_group`)
+- Be able to send direct messages (if restricted by organization settings)
+
+## Rate Limiting
+
+The send message endpoint is rate limited to prevent spam. Limits vary by organization and user role. When rate limited, you'll receive a `429` status code.
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Messages" icon="inbox" href="/api/messages/get">
+    Retrieve messages from Zulip
+  </Card>
+  <Card title="Update Message" icon="pen" href="/api/messages/update">
+    Edit an existing message
+  </Card>
+  <Card title="Delete Message" icon="trash" href="/api/messages/delete">
+    Delete a message
+  </Card>
+  <Card title="Add Reaction" icon="smile" href="/api/messages/reactions">
+    React to a message with emoji
+  </Card>
+</CardGroup>

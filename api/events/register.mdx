@@ -1,0 +1,320 @@
+---
+title: 'Register Event Queue'
+description: 'POST /api/v1/register - Register for real-time events'
+---
+
+## Endpoint
+
+```
+POST /api/v1/register
+```
+
+Register an event queue to receive real-time updates from Zulip.
+
+<Info>
+  The events API is how Zulip's web and mobile apps get real-time updates. It powers all live features in the product.
+</Info>
+
+## Overview
+
+The Zulip events system works in two steps:
+
+1. **Register**: Create an event queue with this endpoint
+2. **Poll**: Fetch events from the queue using [GET /api/v1/events](/api/events/get)
+
+The queue receives events for all changes relevant to the authenticated user.
+
+## Request Parameters
+
+<ParamField body="event_types" type="array">
+  Array of event types to subscribe to.
+  
+  Common types:
+  - `"message"` - New messages
+  - `"subscription"` - Channel subscription changes
+  - `"realm_user"` - User changes
+  - `"presence"` - User presence updates
+  - `"update_message"` - Message edits
+  
+  If not specified, subscribes to all event types.
+</ParamField>
+
+<ParamField body="narrow" type="array">
+  Narrow filter for message events (same format as [GET /messages](/api/messages/get)).
+  
+  Example: `[["stream", "general"]]` for messages in the general channel.
+</ParamField>
+
+<ParamField body="all_public_streams" type="boolean" default="false">
+  Whether to include all public channels in initial data.
+</ParamField>
+
+<ParamField body="include_subscribers" type="boolean" default="false">
+  Whether to include subscriber lists for channels.
+</ParamField>
+
+<ParamField body="client_gravatar" type="boolean" default="false">
+  Whether to use client-side Gravatar rendering.
+</ParamField>
+
+<ParamField body="apply_markdown" type="boolean" default="true">
+  Whether message content should be in HTML (true) or Markdown (false).
+</ParamField>
+
+<ParamField body="fetch_event_types" type="array">
+  Event types to include in the initial state fetch.
+</ParamField>
+
+## Response
+
+<ResponseField name="queue_id" type="string" required>
+  The ID of the event queue. Use this to fetch events.
+</ResponseField>
+
+<ResponseField name="last_event_id" type="integer" required>
+  The ID of the last event. Use -1 initially when fetching events.
+</ResponseField>
+
+<ResponseField name="zulip_feature_level" type="integer">
+  The server's feature level for API compatibility.
+</ResponseField>
+
+<ResponseField name="zulip_version" type="string">
+  The Zulip server version.
+</ResponseField>
+
+<ResponseField name="realm_uri" type="string">
+  The organization's base URL.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://your-domain.zulipchat.com/api/v1/register \
+  -u email@example.com:API_KEY \
+  --data-urlencode 'event_types=["message"]'
+```
+
+```python Python - Simple
+import zulip
+import sys
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Simple approach: Use call_on_each_message
+def handle_message(msg):
+    print(f"{msg['sender_full_name']}: {msg['content']}")
+
+print("Listening for messages...")
+client.call_on_each_message(handle_message)
+```
+
+```python Python - Advanced
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Register queue manually
+result = client.register(
+    event_types=["message", "subscription", "realm_user"]
+)
+
+queue_id = result['queue_id']
+last_event_id = result['last_event_id']
+
+print(f"Registered queue: {queue_id}")
+print(f"Server version: {result['zulip_version']}")
+
+# Now fetch events with this queue_id
+# See GET /events endpoint
+```
+
+```python Python - All Events
+import zulip
+import sys
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Handle all events
+def handle_event(event):
+    if event['type'] == 'message':
+        msg = event['message']
+        print(f"New message: {msg['sender_full_name']}: {msg['content']}")
+    elif event['type'] == 'subscription':
+        print(f"Subscription change: {event['op']}")
+    elif event['type'] == 'presence':
+        print(f"Presence update: User {event.get('user_id')} is {event.get('presence', {}).get('aggregated', {}).get('status')}")
+    else:
+        print(f"Event: {event['type']}")
+
+print("Listening for all events...")
+client.call_on_each_event(handle_event)
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Register queue
+const params = {
+  event_types: ['message', 'subscription']
+};
+
+const result = await client.queues.register(params);
+console.log('Queue ID:', result.queue_id);
+console.log('Last event ID:', result.last_event_id);
+```
+
+</CodeGroup>
+
+## Response Example
+
+<ResponseExample>
+
+```json Success
+{
+  "result": "success",
+  "msg": "",
+  "queue_id": "1517975029:0",
+  "last_event_id": -1,
+  "zulip_feature_level": 183,
+  "zulip_version": "8.0-dev-1802-g0e991f5960",
+  "zulip_merge_base": "8.0-dev-1606-gea6b21cd8c",
+  "realm_uri": "https://your-domain.zulipchat.com",
+  "realm_name": "Your Organization",
+  "max_message_length": 10000,
+  "realm_description": "Welcome to our Zulip organization!"
+}
+```
+
+</ResponseExample>
+
+## Event Types
+
+Common event types you can subscribe to:
+
+<AccordionGroup>
+  <Accordion title="message">
+    New messages sent in channels or direct messages.
+    
+    Essential for chat bots and real-time message processing.
+  </Accordion>
+  
+  <Accordion title="subscription">
+    Changes to channel subscriptions (subscribe, unsubscribe, settings changes).
+  </Accordion>
+  
+  <Accordion title="realm_user">
+    Changes to users (new users, deactivations, profile updates).
+  </Accordion>
+  
+  <Accordion title="presence">
+    User online/offline status changes.
+  </Accordion>
+  
+  <Accordion title="update_message">
+    Message content or topic edits.
+  </Accordion>
+  
+  <Accordion title="reaction">
+    Emoji reactions added or removed from messages.
+  </Accordion>
+  
+  <Accordion title="typing">
+    Typing indicator events.
+  </Accordion>
+  
+  <Accordion title="stream">
+    Channel creation, deletion, or settings changes.
+  </Accordion>
+</AccordionGroup>
+
+## Queue Lifecycle
+
+1. **Register**: Create queue with `POST /register`
+2. **Poll**: Repeatedly call `GET /events` with the queue_id
+3. **Timeout**: Queues automatically expire after ~10 minutes of inactivity
+4. **Reconnect**: If queue expires, register a new one
+
+```python Queue Management
+def maintain_event_queue():
+    client = zulip.Client(config_file="~/.zuliprc")
+    
+    while True:
+        try:
+            # Register new queue
+            result = client.register(event_types=["message"])
+            queue_id = result['queue_id']
+            last_event_id = result['last_event_id']
+            
+            # Poll for events
+            while True:
+                events_result = client.get_events(
+                    queue_id=queue_id,
+                    last_event_id=last_event_id
+                )
+                
+                for event in events_result['events']:
+                    process_event(event)
+                    last_event_id = max(last_event_id, event['id'])
+                    
+        except Exception as e:
+            print(f"Queue error: {e}, reconnecting...")
+            time.sleep(1)
+```
+
+## Best Practices
+
+<Check>
+  **Use client libraries** - They handle queue management, reconnection, and exponential backoff automatically.
+</Check>
+
+<Check>
+  **Filter event types** - Only subscribe to events you need to reduce bandwidth.
+</Check>
+
+<Check>
+  **Handle reconnection** - Queues expire; implement automatic reconnection logic.
+</Check>
+
+<Check>
+  **Process events quickly** - Don't block the event loop with slow processing.
+</Check>
+
+<Warning>
+  Long-polling requests can timeout. Use the `event_queue_longpoll_timeout_seconds` from the response as your HTTP timeout.
+</Warning>
+
+## Use Cases
+
+- **Chat bots** that respond to messages in real-time
+- **Notification systems** that alert on specific events
+- **Analytics** tracking user activity and engagement
+- **Integrations** syncing Zulip data with external systems
+- **Custom clients** building web/mobile apps
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Get Events" icon="download" href="/api/events/get">
+    Fetch events from the queue
+  </Card>
+  <Card title="Delete Queue" icon="trash" href="/api/events/delete">
+    Delete an event queue
+  </Card>
+  <Card title="Send Message" icon="paper-plane" href="/api/messages/send">
+    Respond to message events
+  </Card>
+  <Card title="Get Messages" icon="inbox" href="/api/messages/get">
+    Fetch historical messages
+  </Card>
+</CardGroup>

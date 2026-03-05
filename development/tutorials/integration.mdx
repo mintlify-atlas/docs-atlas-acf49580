@@ -1,0 +1,652 @@
+---
+title: Adding an Integration
+description: Tutorial for adding third-party service integrations to Zulip
+---
+
+This tutorial guides you through adding an integration that connects Zulip with a third-party service. We'll cover both **incoming webhooks** (service sends data to Zulip) and **bot integrations** (Zulip bot interacts with service).
+
+## Integration Types
+
+Zulip supports several integration patterns:
+
+### Incoming Webhooks
+
+Third-party service sends HTTP requests to Zulip:
+
+- GitHub sends notifications on pushes/PRs
+- Sentry sends error alerts  
+- Jira sends issue updates
+
+**When to use**: Service has outgoing webhook support
+
+**Tutorial**: See [Webhook Tutorial](/development/tutorials/webhook)
+
+### Bot Integrations
+
+Zulip bot actively queries third-party service:
+
+- Google Calendar bot checks for upcoming events
+- RSS bot fetches new articles
+- Weather bot queries weather API
+
+**When to use**: Service has API but no webhooks, or need polling
+
+**This tutorial focuses on bot integrations.**
+
+### Native Integrations
+
+Deep integration requiring server-side code:
+
+- LDAP authentication
+- Email mirroring
+- Import from Slack/Mattermost
+
+**When to use**: Core server functionality
+
+## Bot Integration Overview
+
+A bot integration:
+
+1. Runs as a separate process
+2. Uses Zulip API to send/receive messages
+3. Queries third-party service API
+4. Formats data and sends to Zulip
+
+Example: RSS bot polls RSS feeds and posts new articles to Zulip.
+
+## Prerequisites
+
+- Zulip development environment set up
+- Python knowledge
+- Familiarity with the third-party service's API
+- API credentials for the service (if required)
+
+## Step 1: Plan the Integration
+
+### Define Requirements
+
+<AccordionGroup>
+  <Accordion title="What does it do?">
+    - What events trigger notifications?
+    - What data should be displayed?
+    - How often should it check for updates?
+  </Accordion>
+  
+  <Accordion title="Who uses it?">
+    - Individual users or whole organizations?
+    - Does each user need their own credentials?
+    - Are there permission requirements?
+  </Accordion>
+  
+  <Accordion title="Configuration needed?">
+    - API keys or OAuth?
+    - Which channels/topics to post to?
+    - Filtering options?
+  </Accordion>
+</AccordionGroup>
+
+### Example: RSS Integration
+
+**Goal**: Post new RSS feed items to Zulip
+
+**Requirements**:
+- Check feeds periodically (every 5 minutes)
+- Post new items to specified channel/topic
+- Support multiple feeds per bot
+- Include title, link, and summary
+
+## Step 2: Create Bot Structure
+
+### For python-zulip-api Repository
+
+Most bot integrations live in the [python-zulip-api](https://github.com/zulip/python-zulip-api) repository.
+
+<Steps>
+  <Step title="Clone repository">
+    ```bash
+    git clone https://github.com/zulip/python-zulip-api
+    cd python-zulip-api
+    ```
+  </Step>
+  
+  <Step title="Create bot directory">
+    ```bash
+    cd zulip_bots/zulip_bots/bots/
+    mkdir my_integration
+    cd my_integration
+    ```
+  </Step>
+  
+  <Step title="Create required files">
+    ```bash
+    touch __init__.py
+    touch my_integration.py
+    touch test_my_integration.py
+    touch doc.md
+    touch requirements.txt
+    ```
+  </Step>
+</Steps>
+
+### File Structure
+
+```
+my_integration/
+├── __init__.py           # Empty file
+├── my_integration.py     # Main bot code
+├── test_my_integration.py# Tests
+├── doc.md               # User documentation  
+├── requirements.txt      # Python dependencies
+├── config.ini           # Example config (optional)
+└── fixtures/            # Test data (optional)
+    └── test_data.json
+```
+
+## Step 3: Implement the Bot
+
+### Basic Bot Template
+
+**`my_integration.py`**:
+
+```python
+from typing import Dict, Any
+from zulip_bots.lib import BotHandler
+
+class MyIntegrationHandler:
+    """
+    This bot integrates Zulip with MyService.
+    
+    It checks MyService for new items and posts them to Zulip.
+    """
+    
+    def usage(self) -> str:
+        return """This bot posts updates from MyService."""
+    
+    def initialize(self, bot_handler: BotHandler) -> None:
+        """
+        Called once when bot starts.
+        Load config, initialize state, etc.
+        """
+        self.config_info = bot_handler.get_config_info('my_integration')
+        self.api_key = self.config_info.get('api_key')
+        self.check_interval = int(self.config_info.get('check_interval', 300))
+        
+        # Initialize any state
+        self.last_check = None
+    
+    def handle_message(self, message: Dict[str, Any], bot_handler: BotHandler) -> None:
+        """
+        Called when bot receives a message.
+        Respond to user commands.
+        """
+        content = message['content'].strip()
+        
+        if content.lower() == 'help':
+            bot_handler.send_reply(message, self.usage())
+            return
+        
+        if content.lower() == 'check now':
+            self.check_for_updates(bot_handler)
+            bot_handler.send_reply(message, "Checked for updates!")
+            return
+        
+        bot_handler.send_reply(
+            message,
+            "I don't understand that command. Try 'help'."
+        )
+    
+    def check_for_updates(self, bot_handler: BotHandler) -> None:
+        """
+        Query third-party service and post updates.
+        """
+        # Query the service API
+        new_items = self.fetch_new_items()
+        
+        # Post each item to Zulip
+        for item in new_items:
+            message = self.format_message(item)
+            bot_handler.send_message({
+                'type': 'stream',
+                'to': self.config_info.get('stream', 'general'),
+                'topic': self.config_info.get('topic', 'MyService Updates'),
+                'content': message,
+            })
+    
+    def fetch_new_items(self) -> list:
+        """
+        Call third-party service API.
+        """
+        import requests
+        
+        response = requests.get(
+            'https://api.myservice.com/items',
+            headers={'Authorization': f'Bearer {self.api_key}'}
+        )
+        
+        if response.status_code == 200:
+            return response.json()['items']
+        return []
+    
+    def format_message(self, item: Dict[str, Any]) -> str:
+        """
+        Format item data for Zulip.
+        """
+        return f"""**{item['title']}**
+
+{item['description']}
+
+[View details]({item['url']})"""
+
+handler_class = MyIntegrationHandler
+```
+
+### Key Components
+
+#### BotHandler Methods
+
+```python
+# Send message to channel
+bot_handler.send_message({
+    'type': 'stream',
+    'to': 'general',
+    'topic': 'Updates',
+    'content': 'Message text',
+})
+
+# Send direct message
+bot_handler.send_message({
+    'type': 'private',
+    'to': 'user@example.com',
+    'content': 'Message text',
+})
+
+# Reply to message
+bot_handler.send_reply(message, 'Reply text')
+
+# Get config value
+api_key = bot_handler.get_config_info('my_bot')['api_key']
+
+# Store state
+bot_handler.storage.put('last_id', 123)
+last_id = bot_handler.storage.get('last_id')
+```
+
+#### Message Formatting
+
+Use [Zulip's Markdown](/api/message-formatting):
+
+```python
+def format_message(self, data):
+    return f"""**Title**: {data['title']}
+
+*Description*: {data['desc']}
+
+* Point 1
+* Point 2
+
+```python
+code_block()
+```
+
+[Link text]({data['url']})
+
+:tada: Emoji work too!
+"""
+```
+
+## Step 4: Configuration
+
+### config.ini Example
+
+Provide example configuration:
+
+```ini
+[my_integration]
+api_key = YOUR_API_KEY_HERE
+stream = general
+topic = MyService Updates  
+check_interval = 300
+```
+
+### Reading Configuration
+
+```python
+def initialize(self, bot_handler: BotHandler) -> None:
+    self.config = bot_handler.get_config_info('my_integration')
+    
+    # Required values
+    self.api_key = self.config['api_key']
+    
+    # Optional with defaults
+    self.stream = self.config.get('stream', 'general')
+    self.topic = self.config.get('topic', 'Updates')
+    self.interval = int(self.config.get('check_interval', 300))
+```
+
+## Step 5: Add Dependencies
+
+**`requirements.txt`**:
+
+```
+requests>=2.20.0
+feedparser>=6.0.0  # If parsing RSS
+python-dateutil>=2.8.0
+```
+
+## Step 6: Write Tests
+
+**`test_my_integration.py`**:
+
+```python
+from zulip_bots.test_lib import BotTestCase, DefaultTests
+from typing import Any
+
+class TestMyIntegrationBot(BotTestCase, DefaultTests):
+    bot_name = "my_integration"
+    
+    def test_help_command(self) -> None:
+        """Test help command."""
+        with self.mock_config_info({'api_key': 'test_key'}):
+            self.verify_reply(
+                'help',
+                'This bot posts updates from MyService.'
+            )
+    
+    def test_format_message(self) -> None:
+        """Test message formatting."""
+        handler = self.get_bot_message_handler()
+        
+        item = {
+            'title': 'Test Item',
+            'description': 'Test description',
+            'url': 'https://example.com/item'
+        }
+        
+        message = handler.format_message(item)
+        self.assertIn('**Test Item**', message)
+        self.assertIn('Test description', message)
+        self.assertIn('https://example.com/item', message)
+    
+    def test_fetch_items_success(self) -> None:
+        """Test API call success."""
+        with self.mock_config_info({'api_key': 'test_key'}), \
+             self.mock_http_conversation('test_success'):
+            
+            handler = self.get_bot_message_handler()
+            items = handler.fetch_new_items()
+            
+            self.assertEqual(len(items), 2)
+            self.assertEqual(items[0]['title'], 'First Item')
+```
+
+### Test Fixtures
+
+**`fixtures/test_success.json`**:
+
+```json
+{
+    "request": {
+        "api_url": "https://api.myservice.com/items",
+        "headers": {
+            "Authorization": "Bearer test_key"
+        }
+    },
+    "response": {
+        "items": [
+            {
+                "title": "First Item",
+                "description": "First description",
+                "url": "https://example.com/1"
+            },
+            {
+                "title": "Second Item",
+                "description": "Second description",
+                "url": "https://example.com/2"
+            }
+        ]
+    },
+    "response-headers": {
+        "status": 200
+    }
+}
+```
+
+### Run Tests
+
+```bash
+# From python-zulip-api directory
+pytest zulip_bots/zulip_bots/bots/my_integration/
+```
+
+## Step 7: Documentation
+
+**`doc.md`**:
+
+```markdown
+# MyService Integration
+
+This bot integrates Zulip with MyService, posting updates about new items.
+
+## Setup
+
+1. Get a MyService API key:
+   - Go to https://myservice.com/settings/api
+   - Click "Generate API Key"
+   - Copy the key
+
+2. Create a bot:
+   - In Zulip, go to **Settings** > **Bots**
+   - Click **Add a new bot**
+   - Select **Generic bot**
+   - Name it "MyService Bot"
+   - Download the bot's config file
+
+3. Configure the bot:
+   
+   Create `~/my_integration.conf`:
+   
+   ```ini
+   [api]
+   key=<bot-api-key>  # From downloaded config
+   email=myservice-bot@yourserver.zulipchat.com
+   site=https://yourserver.zulipchat.com
+   
+   [my_integration]
+   api_key=<myservice-api-key>  # From step 1
+   stream=general
+   topic=MyService Updates
+   check_interval=300
+   ```
+
+4. Run the bot:
+   
+   ```bash
+   zulip-run-bot my_integration --config ~/my_integration.conf
+   ```
+
+## Usage
+
+The bot automatically checks for updates every 5 minutes (configurable).
+
+You can also:
+
+- **Check immediately**: Send `check now` to the bot
+- **Get help**: Send `help` to the bot
+
+## Configuration
+
+- `api_key`: Your MyService API key (required)
+- `stream`: Channel to post updates (default: general)
+- `topic`: Topic for updates (default: MyService Updates)
+- `check_interval`: Seconds between checks (default: 300)
+```
+
+## Step 8: Register Integration
+
+### Add to integrations list
+
+**`zerver/lib/integrations.py`** in main Zulip repo:
+
+```python
+HUBOT_INTEGRATIONS = [
+    # ...
+    BotIntegration(
+        'my_integration',
+        ['productivity'],  # Categories
+        display_name='MyService',
+        doc='zerver/integrations/my_integration.md',
+    ),
+]
+```
+
+### Add Logo
+
+Add SVG logo to `static/images/integrations/logos/myservice.svg`
+
+Optimize it:
+
+```bash
+./tools/setup/optimize-svg static/images/integrations/logos/myservice.svg
+```
+
+## Step 9: Manual Testing
+
+<Steps>
+  <Step title="Install bot">
+    ```bash
+    cd python-zulip-api
+    pip install -e ./zulip_bots
+    ```
+  </Step>
+  
+  <Step title="Create bot in Zulip">
+    1. Go to Settings > Bots
+    2. Click "Add a new bot"
+    3. Choose "Generic bot"
+    4. Name: "MyService Bot"
+    5. Download config
+  </Step>
+  
+  <Step title="Configure bot">
+    Edit downloaded config, add your section:
+    
+    ```ini
+    [my_integration]
+    api_key=your_key_here
+    stream=test
+    ```
+  </Step>
+  
+  <Step title="Run bot">
+    ```bash
+    zulip-run-bot my_integration --config ~/bot.conf
+    ```
+  </Step>
+  
+  <Step title="Test commands">
+    In Zulip, send message to bot:
+    - `help`
+    - `check now`
+  </Step>
+</Steps>
+
+## Advanced Topics
+
+### Polling Bots
+
+For bots that need to poll periodically:
+
+```python
+import time
+import threading
+
+class PollingHandler:
+    def initialize(self, bot_handler: BotHandler) -> None:
+        self.config = bot_handler.get_config_info('my_bot')
+        
+        # Start polling thread
+        self.polling = True
+        thread = threading.Thread(target=self.poll_loop, args=(bot_handler,))
+        thread.daemon = True
+        thread.start()
+    
+    def poll_loop(self, bot_handler: BotHandler) -> None:
+        while self.polling:
+            try:
+                self.check_for_updates(bot_handler)
+            except Exception as e:
+                print(f"Error polling: {e}")
+            
+            time.sleep(self.config.get('interval', 300))
+```
+
+### State Management
+
+Store data between runs:
+
+```python
+def initialize(self, bot_handler: BotHandler) -> None:
+    # Load last processed ID
+    self.last_id = bot_handler.storage.get('last_id')
+    if self.last_id is None:
+        self.last_id = 0
+
+def check_for_updates(self, bot_handler: BotHandler) -> None:
+    items = self.fetch_items_since(self.last_id)
+    
+    for item in items:
+        self.post_item(item, bot_handler)
+        self.last_id = max(self.last_id, item['id'])
+    
+    # Save state
+    bot_handler.storage.put('last_id', self.last_id)
+```
+
+### Error Handling
+
+```python
+import requests
+from requests.exceptions import RequestException
+
+def fetch_items(self) -> list:
+    try:
+        response = requests.get(
+            self.api_url,
+            headers={'Authorization': f'Bearer {self.api_key}'},
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()['items']
+        
+    except RequestException as e:
+        print(f"Error fetching items: {e}")
+        return []
+    except (KeyError, ValueError) as e:
+        print(f"Error parsing response: {e}")
+        return []
+```
+
+## Best Practices
+
+- ✓ **Rate limiting**: Respect third-party API limits
+- ✓ **Error handling**: Gracefully handle API failures
+- ✓ **Logging**: Log errors and important events
+- ✓ **Configuration**: Make everything configurable
+- ✓ **Documentation**: Explain setup clearly
+- ✓ **Testing**: Test both success and failure cases
+- ✓ **Message formatting**: Use Markdown effectively
+
+## Related Tutorials
+
+- [Webhook Integration](/development/tutorials/webhook) - For incoming webhooks
+- [Writing Views](/tutorials/writing-views) - For complex server-side integrations
+- [API Documentation](/api/) - Zulip API reference
+
+## Example Integrations
+
+Study these existing integrations:
+
+- **RSS** - Polling bot with state management
+- **GitHub** - Webhook integration
+- **Google Calendar** - OAuth and API calls
+- **GitLab** - Complex webhook with many event types

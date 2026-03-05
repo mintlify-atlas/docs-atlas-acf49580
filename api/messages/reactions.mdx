@@ -1,0 +1,392 @@
+---
+title: 'Message Reactions'
+description: 'Add or remove emoji reactions to messages'
+---
+
+## Overview
+
+Emoji reactions let users quickly respond to messages with emoji. This endpoint manages adding and removing reactions.
+
+## Add Reaction
+
+### Endpoint
+
+```
+POST /api/v1/messages/{message_id}/reactions
+```
+
+Add an [emoji reaction](/help/emoji-reactions) to a message.
+
+### Path Parameters
+
+<ParamField path="message_id" type="integer" required>
+  The ID of the message to react to.
+</ParamField>
+
+### Request Parameters
+
+<ParamField body="emoji_name" type="string" required>
+  The emoji's human-readable name.
+  
+  Examples: `"thumbs_up"`, `"tada"`, `"heart"`, `"rocket"`
+  
+  To find emoji names, hover over reactions in the Zulip UI.
+</ParamField>
+
+<ParamField body="emoji_code" type="string">
+  The emoji code for the emoji.
+  
+  Only required for custom emoji and Zulip extra emoji.
+</ParamField>
+
+<ParamField body="reaction_type" type="string">
+  The type of emoji reaction:
+  
+  - `"unicode_emoji"` - Standard Unicode emoji (default)
+  - `"realm_emoji"` - Custom organization emoji
+  - `"zulip_extra_emoji"` - Special Zulip emoji
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://your-domain.zulipchat.com/api/v1/messages/123/reactions \
+  -u email@example.com:API_KEY \
+  -d 'emoji_name=thumbs_up'
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Add a thumbs up reaction
+result = client.add_reaction({
+    "message_id": 123,
+    "emoji_name": "thumbs_up"
+})
+
+print(result)
+# {'result': 'success', 'msg': ''}
+
+# Add other reactions
+client.add_reaction({"message_id": 123, "emoji_name": "tada"})
+client.add_reaction({"message_id": 123, "emoji_name": "rocket"})
+client.add_reaction({"message_id": 123, "emoji_name": "heart"})
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Add a reaction
+const params = {
+  message_id: 123,
+  emoji_name: 'thumbs_up'
+};
+
+const result = await client.reactions.add(params);
+console.log(result);
+```
+
+</CodeGroup>
+
+### Response
+
+<ResponseExample>
+
+```json Success
+{
+  "result": "success",
+  "msg": ""
+}
+```
+
+```json Error - Invalid Emoji
+{
+  "result": "error",
+  "msg": "Invalid emoji code",
+  "code": "BAD_REQUEST"
+}
+```
+
+```json Error - Reaction Already Exists
+{
+  "result": "error",
+  "msg": "Reaction already exists.",
+  "code": "REACTION_ALREADY_EXISTS"
+}
+```
+
+</ResponseExample>
+
+## Remove Reaction
+
+### Endpoint
+
+```
+DELETE /api/v1/messages/{message_id}/reactions
+```
+
+Remove an emoji reaction from a message.
+
+### Path Parameters
+
+<ParamField path="message_id" type="integer" required>
+  The ID of the message.
+</ParamField>
+
+### Request Parameters
+
+<ParamField query="emoji_name" type="string">
+  The emoji name to remove.
+</ParamField>
+
+<ParamField query="emoji_code" type="string">
+  The emoji code (for custom emoji).
+</ParamField>
+
+<ParamField query="reaction_type" type="string">
+  The reaction type (unicode_emoji, realm_emoji, zulip_extra_emoji).
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X DELETE 'https://your-domain.zulipchat.com/api/v1/messages/123/reactions?emoji_name=thumbs_up' \
+  -u email@example.com:API_KEY
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Remove a reaction
+result = client.remove_reaction({
+    "message_id": 123,
+    "emoji_name": "thumbs_up"
+})
+
+print(result)
+# {'result': 'success', 'msg': ''}
+```
+
+```javascript JavaScript
+const params = {
+  message_id: 123,
+  emoji_name: 'thumbs_up'
+};
+
+const result = await client.reactions.remove(params);
+console.log(result);
+```
+
+</CodeGroup>
+
+### Response
+
+<ResponseExample>
+
+```json Success
+{
+  "result": "success",
+  "msg": ""
+}
+```
+
+```json Error - Reaction Not Found
+{
+  "result": "error",
+  "msg": "Reaction doesn't exist",
+  "code": "REACTION_DOES_NOT_EXIST"
+}
+```
+
+</ResponseExample>
+
+## Common Emoji Names
+
+Popular emoji reactions:
+
+<CardGroup cols={3}>
+  <Card title="👍 thumbs_up">
+    Positive feedback
+  </Card>
+  <Card title="🎉 tada">
+    Celebration
+  </Card>
+  <Card title="❤️ heart">
+    Love/appreciation
+  </Card>
+  <Card title="🚀 rocket">
+    Excitement
+  </Card>
+  <Card title="✅ check">
+    Confirmation
+  </Card>
+  <Card title="👀 eyes">
+    Reviewing
+  </Card>
+  <Card title="😂 joy">
+    Funny
+  </Card>
+  <Card title="👎 thumbs_down">
+    Negative feedback
+  </Card>
+  <Card title="🤔 thinking">
+    Pondering
+  </Card>
+</CardGroup>
+
+## Working with Reactions
+
+### Get Message Reactions
+
+Reactions are included when fetching messages:
+
+```python
+result = client.get_messages({
+    "anchor": "newest",
+    "num_before": 10,
+    "num_after": 0
+})
+
+for msg in result['messages']:
+    if msg['reactions']:
+        print(f"Message {msg['id']} reactions:")
+        for reaction in msg['reactions']:
+            print(f"  {reaction['emoji_name']} by user {reaction['user_id']}")
+```
+
+### Reaction Object Structure
+
+```json
+{
+  "emoji_name": "thumbs_up",
+  "emoji_code": "1f44d",
+  "reaction_type": "unicode_emoji",
+  "user_id": 5,
+  "user": {
+    "id": 5,
+    "email": "alice@example.com",
+    "full_name": "Alice"
+  }
+}
+```
+
+### Custom Emoji
+
+For custom organization emoji:
+
+```python
+# Add custom emoji reaction
+result = client.add_reaction({
+    "message_id": 123,
+    "emoji_name": "company_logo",
+    "emoji_code": "company_logo",
+    "reaction_type": "realm_emoji"
+})
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Poll Voting">
+    Use reactions as a quick poll mechanism:
+    
+    ```python
+    # Send poll message
+    result = client.send_message({
+        "type": "stream",
+        "to": "general",
+        "topic": "Lunch Poll",
+        "content": "Where should we go for lunch?\n- 🍕 Pizza\n- 🍜 Ramen\n- 🍔 Burgers"
+    })
+    
+    # Users react with their choice
+    ```
+  </Accordion>
+  
+  <Accordion title="Task Acknowledgment">
+    Team members react to show they've seen a task:
+    
+    ```python
+    # React to acknowledge
+    client.add_reaction({
+        "message_id": task_message_id,
+        "emoji_name": "eyes"  # Indicates "seen"
+    })
+    
+    # React when complete
+    client.add_reaction({
+        "message_id": task_message_id,
+        "emoji_name": "check"  # Indicates "done"
+    })
+    ```
+  </Accordion>
+  
+  <Accordion title="Sentiment Analysis">
+    Collect feedback on announcements:
+    
+    ```python
+    def analyze_reactions(message_id):
+        # Fetch message with reactions
+        msg = client.get_message(message_id)
+        
+        positive = ['thumbs_up', 'heart', 'tada']
+        negative = ['thumbs_down']
+        
+        pos_count = sum(1 for r in msg['reactions'] if r['emoji_name'] in positive)
+        neg_count = sum(1 for r in msg['reactions'] if r['emoji_name'] in negative)
+        
+        return {"positive": pos_count, "negative": neg_count}
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Check>
+  **Check for existing reactions** before adding to avoid errors.
+</Check>
+
+<Check>
+  **Use meaningful emoji** that match your organization's culture.
+</Check>
+
+<Check>
+  **Document emoji usage** in your team's conventions (e.g., ✅ = reviewed, 👀 = in progress).
+</Check>
+
+<Warning>
+  Users can only remove their own reactions (unless they're administrators).
+</Warning>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Send Message" icon="paper-plane" href="/api/messages/send">
+    Send messages to react to
+  </Card>
+  <Card title="Get Messages" icon="inbox" href="/api/messages/get">
+    Fetch messages with reactions
+  </Card>
+  <Card title="Update Message" icon="pen" href="/api/messages/update">
+    Edit message content
+  </Card>
+  <Card title="Real-time Events" icon="bolt" href="/api/events/register">
+    Subscribe to reaction events
+  </Card>
+</CardGroup>

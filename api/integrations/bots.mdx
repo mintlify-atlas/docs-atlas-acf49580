@@ -1,0 +1,385 @@
+---
+title: 'Building Bots'
+description: 'Create interactive bots for Zulip'
+---
+
+## Overview
+
+Zulip bots are automated users that can read messages, respond to commands, and perform actions. They're perfect for automation, workflows, games, and interactive features.
+
+## Bot Types
+
+<CardGroup cols={2}>
+  <Card title="Incoming Webhook Bot">
+    Receives data from external services.
+    
+    Use for: Notifications, alerts, CI/CD updates
+  </Card>
+  <Card title="Outgoing Webhook Bot">
+    Sends Zulip messages to external services.
+    
+    Use for: Commands, integrations, automation
+  </Card>
+  <Card title="Generic Bot">
+    Full API access for complex interactions.
+    
+    Use for: Custom workflows, games, advanced automation
+  </Card>
+  <Card title="Embedded Bot">
+    Runs directly on the Zulip server.
+    
+    Use for: Built-in integrations (self-hosted only)
+  </Card>
+</CardGroup>
+
+## Creating a Bot
+
+<Steps>
+  <Step title="Create Bot Account">
+    Go to **Settings** → **Your bots** → **Add a new bot**
+    
+    - Choose bot type (Generic for most cases)
+    - Enter name and email
+    - Upload avatar (optional)
+  </Step>
+  
+  <Step title="Get API Key">
+    Copy the bot's API key from the bot settings page.
+  </Step>
+  
+  <Step title="Create zuliprc File">
+    Create `~/zuliprc-botname` with:
+    
+    ```ini
+    [api]
+    email=bot@example.com
+    key=bot_api_key_here
+    site=https://your-domain.zulipchat.com
+    ```
+  </Step>
+  
+  <Step title="Write Bot Code">
+    Create your bot using the Zulip library.
+  </Step>
+</Steps>
+
+## Simple Message Bot
+
+A bot that responds to messages:
+
+```python
+import zulip
+import sys
+
+# Initialize client
+client = zulip.Client(config_file="~/zuliprc-bot")
+
+def respond_to_message(msg):
+    """Respond when bot is mentioned"""
+    content = msg['content'].lower()
+    
+    # Check if bot is mentioned
+    if '@**bot name**' not in content:
+        return
+    
+    # Simple responses
+    if 'hello' in content:
+        response = "Hello! How can I help you?"
+    elif 'help' in content:
+        response = "Available commands:\n- hello\n- weather [city]\n- joke"
+    elif 'joke' in content:
+        response = "Why did the developer quit? Because they didn't get arrays! 😄"
+    else:
+        response = "I didn't understand that. Type 'help' for available commands."
+    
+    # Send response
+    client.send_message({
+        "type": msg['type'],
+        "to": msg['display_recipient'] if msg['type'] == 'stream' else msg['sender_email'],
+        "subject": msg['subject'] if msg['type'] == 'stream' else '',
+        "content": response
+    })
+
+print("Bot is running...")
+client.call_on_each_message(respond_to_message)
+```
+
+## Advanced Bot Example
+
+A weather bot that fetches real data:
+
+```python
+import zulip
+import requests
+import re
+
+client = zulip.Client(config_file="~/zuliprc-weather")
+API_KEY = "your_weather_api_key"
+
+def get_weather(city):
+    """Fetch weather from API"""
+    url = f"https://api.openweathermap.org/data/2.5/weather"
+    params = {
+        "q": city,
+        "appid": API_KEY,
+        "units": "metric"
+    }
+    
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        temp = data['main']['temp']
+        description = data['weather'][0]['description']
+        return f"{city}: {temp}°C, {description}"
+    else:
+        return f"Couldn't fetch weather for {city}"
+
+def handle_message(msg):
+    """Process weather requests"""
+    content = msg['content']
+    
+    # Match "weather [city]" pattern
+    match = re.search(r'weather\s+(.+)', content, re.IGNORECASE)
+    
+    if match:
+        city = match.group(1).strip()
+        weather_info = get_weather(city)
+        
+        client.send_message({
+            "type": msg['type'],
+            "to": msg['display_recipient'] if msg['type'] == 'stream' else msg['sender_email'],
+            "subject": msg['subject'] if msg['type'] == 'stream' else '',
+            "content": weather_info
+        })
+
+print("Weather bot is running...")
+client.call_on_each_message(handle_message)
+```
+
+## Interactive Bot Framework
+
+Use Zulip's bot framework for structured bots:
+
+```python
+from zulip_bots.lib import BotHandler
+
+class MyCustomBot:
+    def usage(self):
+        return '''
+        This bot provides helpful responses.
+        Commands:
+        - @bot hello - Greet the bot
+        - @bot help - Show this help
+        '''
+    
+    def handle_message(self, message, bot_handler: BotHandler):
+        content = message['content'].lower()
+        
+        if 'hello' in content:
+            response = "Hello! 👋"
+        elif 'help' in content:
+            response = self.usage()
+        else:
+            response = "I'm here to help! Type 'help' for commands."
+        
+        bot_handler.send_reply(message, response)
+
+handler_class = MyCustomBot
+```
+
+Run with:
+
+```bash
+zulip-run-bot MyCustomBot --config-file ~/zuliprc-bot
+```
+
+## Bot Patterns
+
+### Command Parser
+
+```python
+def parse_command(message):
+    """Extract command and arguments"""
+    # Remove bot mention
+    text = message['content']
+    text = re.sub(r'@\*\*.*?\*\*', '', text).strip()
+    
+    # Split into parts
+    parts = text.split(maxsplit=1)
+    command = parts[0].lower() if parts else ''
+    args = parts[1] if len(parts) > 1 else ''
+    
+    return command, args
+
+# Usage
+command, args = parse_command(msg)
+
+if command == 'search':
+    results = search(args)
+elif command == 'create':
+    create_task(args)
+```
+
+### State Management
+
+```python
+class StatefulBot:
+    def __init__(self):
+        self.user_states = {}  # Track conversation state
+    
+    def handle_message(self, msg):
+        user_id = msg['sender_id']
+        content = msg['content'].lower()
+        
+        # Get user's current state
+        state = self.user_states.get(user_id, 'idle')
+        
+        if state == 'idle' and 'start' in content:
+            self.user_states[user_id] = 'awaiting_name'
+            return "What's your name?"
+        
+        elif state == 'awaiting_name':
+            name = content
+            self.user_states[user_id] = 'awaiting_age'
+            return f"Nice to meet you, {name}! How old are you?"
+        
+        elif state == 'awaiting_age':
+            age = content
+            self.user_states[user_id] = 'idle'
+            return f"Got it! You're {age} years old."
+```
+
+### Scheduled Actions
+
+```python
+import schedule
+import time
+import threading
+
+def send_daily_report():
+    """Send a daily summary"""
+    report = generate_report()
+    client.send_message({
+        "type": "stream",
+        "to": "general",
+        "topic": "Daily Report",
+        "content": report
+    })
+
+# Schedule daily at 9 AM
+schedule.every().day.at("09:00").do(send_daily_report)
+
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+# Run scheduler in background thread
+scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+scheduler_thread.start()
+
+# Main bot loop
+client.call_on_each_message(handle_message)
+```
+
+## Bot Permissions
+
+Bots have the same permissions as the user who created them:
+
+- Can access channels the owner can access
+- Can send messages where owner can send
+- Cannot perform administrative actions (unless owner is admin)
+
+<Warning>
+  Bots created by administrators have admin-level access. Use carefully!
+</Warning>
+
+## Best Practices
+
+<Check>
+  **Error handling** - Catch exceptions and respond gracefully
+</Check>
+
+<Check>
+  **Rate limiting** - Don't spam channels with too many messages
+</Check>
+
+<Check>
+  **Help commands** - Provide clear usage instructions
+</Check>
+
+<Check>
+  **Logging** - Log bot activity for debugging
+</Check>
+
+<Check>
+  **Testing** - Test in a dedicated channel before deploying
+</Check>
+
+## Deployment
+
+### systemd Service (Linux)
+
+```ini /etc/systemd/system/zulip-bot.service
+[Unit]
+Description=Zulip Bot
+After=network.target
+
+[Service]
+Type=simple
+User=botuser
+WorkingDirectory=/home/botuser/bot
+ExecStart=/usr/bin/python3 /home/botuser/bot/bot.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl enable zulip-bot
+sudo systemctl start zulip-bot
+```
+
+### Docker
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY bot.py .
+COPY zuliprc .
+
+CMD ["python", "bot.py"]
+```
+
+## Example Bots
+
+Explore example bots:
+
+- **[Followup bot](https://github.com/zulip/python-zulip-api/tree/main/zulip_bots/zulip_bots/bots/followup)** - Remind about messages
+- **[GitHub detail](https://github.com/zulip/python-zulip-api/tree/main/zulip_bots/zulip_bots/bots/github_detail)** - Expand GitHub links
+- **[Wikipedia](https://github.com/zulip/python-zulip-api/tree/main/zulip_bots/zulip_bots/bots/wikipedia)** - Search Wikipedia
+- **[Chess](https://github.com/zulip/python-zulip-api/tree/main/zulip_bots/zulip_bots/bots/chess)** - Play chess
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Client Libraries" icon="code" href="/api/client-libraries">
+    Python and JavaScript libraries
+  </Card>
+  <Card title="Real-time Events" icon="bolt" href="/api/events/register">
+    Subscribe to live events
+  </Card>
+  <Card title="Outgoing Webhooks" icon="webhook" href="/api/integrations/outgoing-webhooks">
+    Alternative bot approach
+  </Card>
+  <Card title="Send Messages" icon="paper-plane" href="/api/messages/send">
+    Send messages programmatically
+  </Card>
+</CardGroup>

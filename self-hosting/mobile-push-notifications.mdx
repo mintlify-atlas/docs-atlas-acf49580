@@ -1,0 +1,379 @@
+---
+title: Mobile Push Notifications
+description: Enable mobile push notifications for your self-hosted Zulip server
+---
+
+Zulip's mobile apps support push notifications to notify users of new messages. The Zulip Mobile Push Notification Service enables self-hosted servers to send notifications to the official Zulip mobile apps.
+
+## Why a push notification service
+
+Google and Apple's push notification systems don't support multiple untrusted servers sending notifications to the same app. The Zulip Mobile Push Notification Service solves this by forwarding notifications from your server to the Zulip mobile apps.
+
+## Quick setup
+
+<Steps>
+  <Step title="Verify requirements">
+    - Outgoing HTTPS access to the public internet
+    - Valid email in `ZULIP_ADMINISTRATOR` setting
+    - Zulip Server 10.0+ (for automatic setup)
+  </Step>
+
+  <Step title="Enable push notifications">
+    Edit `/etc/zulip/settings.py` and uncomment:
+
+    ```python
+    ZULIP_SERVICE_PUSH_NOTIFICATIONS = True
+    ```
+
+    Optionally disable usage statistics:
+    ```python
+    ZULIP_SERVICE_SUBMIT_USAGE_STATISTICS = False
+    ```
+  </Step>
+
+  <Step title="Restart Zulip">
+    ```bash
+    /home/zulip/deployments/current/scripts/restart-server
+    ```
+  </Step>
+
+  <Step title="Register your server">
+    **If you installed with `--push-notifications`**, your server is already registered.
+
+    **Otherwise, register manually:**
+
+    ```bash
+    su zulip -c '/home/zulip/deployments/current/manage.py register_server'
+    ```
+
+    This command will:
+    - Show you what data will be sent
+    - Ask you to accept Terms of Service
+    - Register your server with the push notification service
+  </Step>
+
+  <Step title="Upgrade plan if needed">
+    Organizations with **more than 10 users** must upgrade to a paid plan or the free Community plan.
+
+    See [plan management](#plan-management) below.
+  </Step>
+
+  <Step title="Test notifications">
+    Follow [testing instructions](https://zulip.com/help/mobile-notifications#testing-mobile-notifications) to verify push notifications work.
+  </Step>
+</Steps>
+
+## Automatic registration during install
+
+Zulip 10.0+ installers support automatic registration:
+
+```bash
+./zulip-server-*/scripts/setup/install \
+    --push-notifications \
+    --certbot \
+    --email=YOUR_EMAIL \
+    --hostname=YOUR_HOSTNAME
+```
+
+The `--push-notifications` flag will:
+- Prompt you to accept Terms of Service
+- Register your server at the end of installation
+- Enable push notifications automatically
+
+<Tip>
+Add `--agree-to-terms-of-service` to skip the TOS prompt for scripted installations.
+</Tip>
+
+## Plan management
+
+### For organizations with 10+ users
+
+Organizations with more than 10 users must upgrade to:
+
+- **Zulip Business** (paid)
+- **Zulip Enterprise** (paid)
+- **Community plan** (free for eligible organizations)
+
+Learn about [plan eligibility](https://zulip.com/help/self-hosted-billing).
+
+### Managing plans (Zulip 8.0+)
+
+On Zulip 8.0+, organization owners and billing administrators can manage plans from the Zulip app:
+
+1. Go to **Organization settings** > **Plans and billing**
+2. Follow the prompts to upgrade or manage your plan
+
+See [complete instructions](https://zulip.com/help/self-hosted-billing).
+
+### Managing plans (older versions)
+
+For servers older than Zulip 8.0, or to manage plans for multiple organizations:
+
+1. Visit [https://selfhosting.zulip.com/serverlogin/](https://selfhosting.zulip.com/serverlogin/)
+2. Log in using credentials from `/etc/zulip/zulip-secrets.conf`:
+   ```bash
+   # Username:
+   grep zulip_org_id /etc/zulip/zulip-secrets.conf
+
+   # Password:
+   grep zulip_org_key /etc/zulip/zulip-secrets.conf
+   ```
+
+### Configure billing administrators
+
+Add users who can manage plans and billing:
+
+```bash
+# Add billing administrator
+/home/zulip/deployments/current/manage.py change_user_role \
+    -r '' username@example.com is_billing_admin
+
+# Remove billing administrator
+/home/zulip/deployments/current/manage.py change_user_role \
+    --revoke -r '' username@example.com is_billing_admin
+```
+
+## Security and privacy
+
+### What data is shared
+
+The push notification service receives (but does not store) for each notification:
+
+- Numeric message ID
+- Sender name and avatar URL
+- Recipient information (channel name, topic, DM recipients)
+- Timestamp
+- Message content
+
+<Note>
+Zulip 11.0+ includes an organization setting to exclude message content from push notifications for enhanced privacy. This is currently less usable because mobile apps don't yet support end-to-end encrypted notifications.
+</Note>
+
+### What data is stored
+
+The service stores:
+
+- APNS/FCM tokens for mobile devices
+- User ID numbers (opaque to the service)
+- [Basic organization metadata](#uploaded-metadata)
+- [Usage statistics](#usage-statistics) (if enabled)
+- Push notification count aggregates
+
+### Uploaded metadata
+
+All registered servers upload basic metadata about hosted organizations:
+
+- Server settings from `/server_settings` API
+- Organization type and creation date  
+- Number of users by role
+
+This metadata is required for:
+- Determining plan eligibility
+- Billing calculations
+- Supporting mobile app login flows
+
+### Usage statistics
+
+By default, servers also upload usage statistics:
+
+- Messages sent/read counts
+- Active user counts (1-day, 7-day, 15-day)
+- Breakdown by client and integration type
+
+Disable by setting in `/etc/zulip/settings.py`:
+
+```python
+ZULIP_SERVICE_SUBMIT_USAGE_STATISTICS = False
+```
+
+### Data protection
+
+All data transmission:
+- Uses SSL/TLS encryption
+- Goes through the [open-source](https://github.com/zulip/zulip/tree/main/zilencer) push notification service
+- Is managed by Zulip's security-focused team
+- Follows [Privacy Policy](https://zulip.com/policies/privacy) and [Terms of Service](https://zulip.com/policies/terms)
+
+## Managing registration
+
+### Update registration
+
+Update your server's contact email or hostname:
+
+```bash
+su zulip -c '/home/zulip/deployments/current/manage.py register_server'
+```
+
+This updates the registration with current values from `/etc/zulip/settings.py`.
+
+### Rotate API key
+
+Rotate your push notification service API key:
+
+```bash
+su zulip -c '/home/zulip/deployments/current/manage.py register_server --rotate-key'
+```
+
+This generates a new `zulip_org_key` in `/etc/zulip/zulip-secrets.conf`.
+
+### Transfer registration to new server
+
+When migrating to new hardware:
+
+**Best method:** Copy credentials during migration:
+
+1. Use [backup/restore](/self-hosting/backup-restore) (automatically copies credentials)
+2. Or manually copy `zulip_org_id` and `zulip_org_key` from `/etc/zulip/zulip-secrets.conf`
+
+**If you lost original credentials:**
+
+<Steps>
+  <Step title="Ensure new server is accessible">
+    - Server must be accessible at the original hostname
+    - SSL certificates must be valid
+  </Step>
+
+  <Step title="Run registration transfer">
+    ```bash
+    /home/zulip/deployments/current/manage.py register_server --registration-transfer
+    ```
+
+    This verifies you control the hostname and regenerates credentials.
+  </Step>
+
+  <Step title="Restart server">
+    ```bash
+    /home/zulip/deployments/current/scripts/restart-server
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+Transferring registration generates new `zulip_org_key`, which deactivates the old server's access.
+</Warning>
+
+### Deactivate registration
+
+To stop using the push notification service:
+
+<Steps>
+  <Step title="Cancel paid plans">
+    [Cancel any active paid plans](https://zulip.com/help/self-hosted-billing#cancel-paid-plan) first.
+  </Step>
+
+  <Step title="Deregister server">
+    ```bash
+    su zulip -c '/home/zulip/deployments/current/manage.py register_server --deactivate'
+    ```
+  </Step>
+
+  <Step title="Disable in settings">
+    Comment out in `/etc/zulip/settings.py`:
+
+    ```python
+    # ZULIP_SERVICE_PUSH_NOTIFICATIONS = True
+    ```
+
+    Restart server:
+    ```bash
+    /home/zulip/deployments/current/scripts/restart-server
+    ```
+  </Step>
+</Steps>
+
+### Temporarily pause notifications
+
+To temporarily stop using the service without deregistering:
+
+Comment out in `/etc/zulip/settings.py`:
+
+```python
+# PUSH_NOTIFICATION_BOUNCER_URL = 'https://push.zulipchat.com'
+```
+
+Restart server:
+```bash
+/home/zulip/deployments/current/scripts/restart-server
+```
+
+Uncomment and restart to resume.
+
+## Rate limits
+
+The service has a rate limit of **1000 requests per minute** per server. This is primarily to protect against DoS attacks.
+
+Normal usage should never hit this limit. If you do, [contact support](https://zulip.com/help/contact-support).
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Registration fails">
+    **Error: Cannot connect to push notification service**
+
+    - Verify outgoing HTTPS access
+    - Check firewall allows port 443 outbound
+    - Configure HTTP proxy if needed
+
+    **Error: Invalid email address**
+
+    - Set valid email in `ZULIP_ADMINISTRATOR` in `/etc/zulip/settings.py`
+    - Restart server and try again
+  </Accordion>
+
+  <Accordion title="Push notifications not received">
+    **Check registration:**
+    ```bash
+    grep zulip_org_id /etc/zulip/zulip-secrets.conf
+    ```
+
+    Should show a UUID. If missing, register server.
+
+    **Check configuration:**
+    ```python
+    # In /etc/zulip/settings.py
+    ZULIP_SERVICE_PUSH_NOTIFICATIONS = True
+    PUSH_NOTIFICATION_BOUNCER_URL = 'https://push.zulipchat.com'
+    ```
+
+    **Check mobile app:**
+    - User logged in?
+    - Notifications enabled in app?
+    - Test with [test instructions](https://zulip.com/help/mobile-notifications#testing-mobile-notifications)
+  </Accordion>
+
+  <Accordion title="Plan upgrade required">
+    For organizations with 10+ users:
+
+    1. Go to **Organization settings** > **Plans and billing**
+    2. Select appropriate plan
+    3. Complete upgrade process
+
+    Or visit [https://selfhosting.zulip.com/serverlogin/](https://selfhosting.zulip.com/serverlogin/)
+  </Accordion>
+</AccordionGroup>
+
+## Getting help
+
+For push notification issues:
+
+- Check `/var/log/zulip/errors.log` for errors
+- Visit [Zulip development community](https://zulip.com/development-community/)
+- Contact [support@zulip.com](mailto:support@zulip.com) for plan/billing questions
+- Email [sales@zulip.com](mailto:sales@zulip.com) for enterprise support
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Test Notifications" icon="mobile" href="https://zulip.com/help/mobile-notifications#testing-mobile-notifications">
+    Verify push notifications work
+  </Card>
+  <Card title="Plan Management" icon="credit-card" href="https://zulip.com/help/self-hosted-billing">
+    Manage your Zulip plan
+  </Card>
+  <Card title="Mobile Apps" icon="mobile-screen" href="https://zulip.com/apps/">
+    Download Zulip mobile apps
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/self-hosting/troubleshooting">
+    Debug server issues
+  </Card>
+</CardGroup>

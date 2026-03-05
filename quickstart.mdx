@@ -1,80 +1,515 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get started with Zulip in 5 minutes - from account setup to sending your first message
 ---
 
-## Get started in three steps
+This guide will walk you through getting started with Zulip, from creating your account to sending your first message. Let's get you up and running in just a few minutes!
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+## Choose Your Path
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Join an Existing Organization" icon="users">
+    If you received an invitation to a Zulip organization, start here
+  </Card>
+  
+  <Card title="Create Your Own Organization" icon="plus">
+    Set up a new Zulip organization for your team
+  </Card>
 </CardGroup>
 
+## Step 1: Set Up Your Account
+
+### Joining an Existing Organization
+
+<Steps>
+  <Step title="Check your email">
+    Look for an invitation email from Zulip. It will contain a link to join your organization.
+  </Step>
+  
+  <Step title="Click the invitation link">
+    This will take you to the registration page for your organization.
+  </Step>
+  
+  <Step title="Create your account">
+    Enter your name and create a password. You can also sign in with Google, GitHub, or other configured authentication methods.
+  </Step>
+</Steps>
+
+### Creating a New Organization
+
+<Steps>
+  <Step title="Visit Zulip Cloud">
+    Go to [zulip.com/new](https://zulip.com/new) to create a new organization.
+  </Step>
+  
+  <Step title="Enter your email">
+    Provide your work email address to get started.
+  </Step>
+  
+  <Step title="Confirm your email">
+    Check your inbox for a confirmation email and click the link.
+  </Step>
+  
+  <Step title="Set up your organization">
+    Choose your organization name, URL, and complete the setup wizard.
+  </Step>
+</Steps>
+
+<Tip>
+  **Prefer self-hosting?** Check out our [installation guide](/self-hosting/installation) to deploy Zulip on your own infrastructure.
+</Tip>
+
+## Step 2: Complete Your Profile
+
+Once you're logged in, personalize your account:
+
+<Steps>
+  <Step title="Add a profile picture">
+    Click your profile picture in the top right corner, then select **Personal settings** → **Profile**. Upload a photo or use Gravatar.
+  </Step>
+  
+  <Step title="Fill in your profile details">
+    Add information about yourself:
+    
+    - Your full name
+    - Your role or title
+    - Timezone (important for async collaboration)
+    - Custom profile fields (if configured by your org)
+  </Step>
+  
+  <Step title="Set up your preferences">
+    Navigate to **Personal settings** → **Preferences** to customize:
+    
+    - Theme (light/dark)
+    - Language
+    - Emoji style
+    - Font size
+    - Keyboard shortcuts
+  </Step>
+</Steps>
+
+<Info>
+  **First-time tip**: We recommend starting with the web or desktop app to get familiar with Zulip before using mobile.
+</Info>
+
+## Step 3: Get the Apps
+
+Zulip works everywhere you work:
+
+<CardGroup cols={3}>
+  <Card title="Desktop" icon="desktop">
+    **macOS, Windows, Linux**
+    
+    Download from [zulip.com/apps](https://zulip.com/apps)
+    
+    ✓ Native notifications
+    ✓ Auto-updates
+    ✓ Multi-org support
+  </Card>
+  
+  <Card title="Mobile" icon="mobile">
+    **iOS and Android**
+    
+    Download from App Store or Google Play
+    
+    ✓ Push notifications
+    ✓ Offline reading
+    ✓ Share integration
+  </Card>
+  
+  <Card title="Web" icon="globe">
+    **Any browser**
+    
+    Just visit your organization URL
+    
+    ✓ No installation needed
+    ✓ Always up to date
+    ✓ Works everywhere
+  </Card>
+</CardGroup>
+
+## Step 4: Understand Topics
+
+**Topics** are what make Zulip special. Every message in Zulip belongs to a channel and has a topic.
+
+<div className="bg-gradient-to-r from-[#5c9cfc]/10 to-[#747bfc]/10 rounded-lg p-6 my-4 border-l-4 border-[#5c9cfc]">
+  <h3 className="text-lg font-semibold mb-2">What's a topic?</h3>
+  <p>
+    A topic is like the subject line of an email. It describes what a conversation is about. This lets multiple conversations happen in the same channel without getting mixed up.
+  </p>
+</div>
+
+### Example: The #general channel
+
+Instead of all messages in #general being one big stream, you might have:
+
+- **Topic: "Welcome"** - Introductions from new team members
+- **Topic: "Lunch plans"** - Coordinating today's lunch
+- **Topic: "Bug #1234"** - Discussing a specific issue
+- **Topic: "Q1 Planning"** - Planning discussion that spans several days
+
+Each conversation stays organized and easy to follow!
+
+<Tip>
+  **Coming from Slack or Teams?** Topics in Zulip replace the "threads" feature, but they work much better because they're front and center, not hidden in a sidebar.
+</Tip>
+
+## Step 5: Subscribe to Channels
+
+Channels (also called streams) organize your organization's conversations by team, project, or topic area.
+
+<Steps>
+  <Step title="Open the channel browser">
+    Click the **#** icon in the left sidebar or press `Q` to open the channel list.
+  </Step>
+  
+  <Step title="Browse available channels">
+    You'll see:
+    - **Subscribed**: Channels you're already subscribed to
+    - **All channels**: Public channels you can join
+    
+    Each channel shows its description and number of subscribers.
+  </Step>
+  
+  <Step title="Subscribe to channels">
+    Click **Subscribe** next to any channel that interests you.
+    
+    Recommended channels to start:
+    - **#general** - Organization-wide discussions
+    - **#new members** - Questions and help for new users
+    - Team or project channels relevant to your work
+  </Step>
+  
+  <Step title="Customize notifications">
+    For each channel, you can:
+    - Mute it (stay subscribed but don't get notifications)
+    - Set notification preferences
+    - Pin it to the top of your sidebar
+  </Step>
+</Steps>
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Don't worry about subscribing to too many channels. Zulip's topic-based organization makes it easy to scan and catch up on what matters.
 </Note>
+
+## Step 6: Send Your First Message
+
+Let's send your first message! We'll start with a channel message.
+
+### Compose a Channel Message
+
+<Steps>
+  <Step title="Start composing">
+    Click **New topic** in the compose box at the bottom of the screen, or press `C`.
+  </Step>
+  
+  <Step title="Choose your channel">
+    Type the channel name (e.g., "general") or select from the dropdown.
+  </Step>
+  
+  <Step title="Enter a topic">
+    Give your message a descriptive topic. For your first message, try "Introduction" or "Hello from [Your Name]".
+    
+    Good topic names are specific:
+    - ✅ "Bug in login page"
+    - ✅ "Q1 budget review"
+    - ✅ "Redesign feedback"
+    - ❌ "Question" (too vague)
+    - ❌ "Hi" (not descriptive)
+  </Step>
+  
+  <Step title="Write your message">
+    Type your message in the compose box. You can use:
+    
+    - **Bold** with `**bold**`
+    - *Italic* with `*italic*`
+    - `Code` with `` `code` ``
+    - Emoji with `:smile:` :smile:
+    - And [much more](/guides/message-formatting)!
+  </Step>
+  
+  <Step title="Send">
+    Press **Enter** (or **Ctrl+Enter** depending on your settings) to send!
+  </Step>
+</Steps>
+
+### Try a Direct Message
+
+<Steps>
+  <Step title="Start a DM">
+    Click **New direct message** or press `X`.
+  </Step>
+  
+  <Step title="Choose recipients">
+    Type the name of one or more people to message. You can send DMs to individuals or create group DMs with up to 8 people.
+  </Step>
+  
+  <Step title="Write and send">
+    Type your message and press **Enter** to send.
+  </Step>
+</Steps>
+
+<Info>
+  **Keyboard shortcuts are your friend!** Press `?` to see all available shortcuts. Here are a few essential ones:
+  - `C` - New channel message
+  - `X` - New direct message  
+  - `R` - Reply to selected message
+  - `S` - Narrow to topic
+</Info>
+
+## Step 7: Read and Reply to Messages
+
+Now let's learn how to navigate conversations:
+
+### Finding Conversations
+
+<Accordion title="Inbox View (Recommended for new users)">
+  The **Inbox** shows all your unread messages organized by conversation:
+  
+  1. Click **Inbox** in the left sidebar
+  2. See your unread messages grouped by channel and topic
+  3. Click any conversation to read it
+  4. Mark conversations as read individually or all at once
+  
+  This is the best way to catch up on what you've missed!
+</Accordion>
+
+<Accordion title="Recent Conversations">
+  See all recent activity across your organization:
+  
+  1. Click **Recent conversations** in the left sidebar
+  2. Browse topics with recent messages
+  3. Click any topic to jump into that conversation
+</Accordion>
+
+<Accordion title="Channel Sidebar">
+  The left sidebar shows your subscribed channels:
+  
+  1. Click a channel name to see all messages in that channel
+  2. Click a topic name to narrow to just that conversation
+  3. See unread counts next to each channel and topic
+</Accordion>
+
+### Replying to Messages
+
+<Steps>
+  <Step title="Select a message">
+    Click on the message you want to reply to, or use arrow keys to navigate.
+  </Step>
+  
+  <Step title="Press R to reply">
+    The compose box will automatically fill in the channel and topic from the selected message.
+  </Step>
+  
+  <Step title="Write your reply">
+    Type your response. Your message will appear in the same topic, keeping the conversation organized.
+  </Step>
+  
+  <Step title="Mention someone (optional)">
+    Type `@` followed by their name to notify them:
+    - `@Alice` notifies Alice
+    - `@**all**` notifies everyone in the channel (use sparingly!)
+  </Step>
+</Steps>
+
+<Warning>
+  **Important**: Replying keeps the conversation in the same topic. If you want to start a new conversation, use `C` for a new topic instead of `R` to reply.
+</Warning>
+
+## Step 8: Explore Key Features
+
+Now that you've sent your first messages, explore these powerful features:
+
+<CardGroup cols={2}>
+  <Card title="Search Messages" icon="magnifying-glass">
+    Press `/` to search. Try:
+    ```
+    sender:alice
+    stream:general topic:"bug reports"
+    is:starred
+    ```
+    [Learn more about search](/features#advanced-search)
+  </Card>
+  
+  <Card title="Star Important Messages" icon="star">
+    Click the star icon on any message to bookmark it. Find starred messages anytime in the left sidebar.
+  </Card>
+  
+  <Card title="Emoji Reactions" icon="face-smile">
+    Hover over a message and click the emoji icon to add a reaction. Quick way to acknowledge without a full reply!
+  </Card>
+  
+  <Card title="Quote Messages" icon="quote-left">
+    Click the three-dot menu on any message and select "Quote and reply" to include context in your response.
+  </Card>
+</CardGroup>
+
+## Step 9: Configure Notifications
+
+Get notified the way you work:
+
+<Steps>
+  <Step title="Open notification settings">
+    Go to **Personal settings** → **Notifications**
+  </Step>
+  
+  <Step title="Choose your notification style">
+    - **Desktop notifications**: Pop-ups on your computer
+    - **Mobile push notifications**: Alerts on your phone
+    - **Email notifications**: Messages sent to email
+    - **Audible notifications**: Sound alerts
+  </Step>
+  
+  <Step title="Customize by channel">
+    Set different notification preferences for each channel:
+    - **All messages**: Get notified for every message
+    - **@-mentions only**: Only when someone mentions you
+    - **Muted**: Stay subscribed but don't get notifications
+  </Step>
+  
+  <Step title="Set up follows">
+    Follow specific topics to get notified for all messages in that conversation, even without being mentioned.
+  </Step>
+</Steps>
+
+<Tip>
+  **Recommendation**: Start with @-mentions only for most channels. Follow specific topics you want to track closely. You can always adjust as you learn your preferences!
+</Tip>
+
+## Common Tasks
+
+### Edit a Message
+
+1. Hover over your message
+2. Click the pencil icon (or press `E` when the message is selected)
+3. Make your changes
+4. Press **Enter** to save
+
+<Info>
+  Edited messages show an "EDITED" indicator with edit history. Administrators can configure how long users can edit messages.
+</Info>
+
+### Move a Message to a Different Topic
+
+1. Click the three-dot menu on the message
+2. Select **Move messages**
+3. Choose to move just this message or all messages in the topic
+4. Enter the new channel and/or topic name
+
+### Mute a Topic
+
+If a conversation isn't relevant to you:
+
+1. Hover over the topic in the left sidebar
+2. Click the three-dot menu
+3. Select **Mute topic**
+
+Muted topics won't appear in your inbox or unread counts.
+
+### Format Your Messages
+
+Click the **A** icon in the compose box to see formatting options:
+
+- Bold, italic, strikethrough
+- Links
+- Bulleted and numbered lists
+- Code blocks
+- Emoji picker
+- File uploads
+
+Or type Markdown directly:
+
+```markdown
+**Bold text**
+*Italic text*
+`Code`
+[Link](https://example.com)
+
+```python
+def hello():
+    print("Code block")
+```
+
+- Bulleted list
+1. Numbered list
+```
+
+## Tips for Success
+
+<AccordionGroup>
+  <Accordion title="Use descriptive topic names">
+    Good topics make conversations easy to find later:
+    - ✅ "Budget Q1 2024"
+    - ✅ "Bug: Login fails on Firefox"
+    - ✅ "Hiring: Backend engineer role"
+    - ❌ "Question"
+    - ❌ "FYI"
+    - ❌ "Meeting"
+  </Accordion>
+  
+  <Accordion title="Don't worry about interrupting">
+    Each topic is its own conversation. You're not interrupting by starting a new topic in the same channel!
+  </Accordion>
+  
+  <Accordion title="Use threads (topics) instead of DMs">
+    Channel discussions are searchable and help others learn. Use DMs for truly private conversations.
+  </Accordion>
+  
+  <Accordion title="Check Recent Conversations">
+    The Recent Conversations view is great for seeing what's happening across your organization.
+  </Accordion>
+  
+  <Accordion title="Master keyboard shortcuts">
+    Keyboard shortcuts make Zulip incredibly fast. Press `?` to see them all, and learn a few at a time.
+  </Accordion>
+</AccordionGroup>
+
+## Get Help
+
+<CardGroup cols={2}>
+  <Card title="Help Center" icon="book" href="https://zulip.com/help/">
+    Comprehensive user documentation
+  </Card>
+  
+  <Card title="Development Community" icon="comments" href="https://chat.zulip.org">
+    Ask questions in the Zulip community
+  </Card>
+  
+  <Card title="Feature Tour" icon="video">
+    Watch the [2-minute video tour](https://static.zulipchat.com/static/navigation-tour-video/zulip-10.mp4)
+  </Card>
+  
+  <Card title="Keyboard Shortcuts" icon="keyboard">
+    Press `?` anytime to see all available shortcuts
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Steps>
+  <Step title="Explore integrations">
+    Connect Zulip with the tools you already use. Check out [100+ native integrations](/features#integrations) for GitHub, Jira, and more.
+  </Step>
+  
+  <Step title="Invite your team">
+    Go to **Organization settings** → **Users** → **Invite users** to bring your team to Zulip.
+  </Step>
+  
+  <Step title="Set up bots">
+    Create custom bots to automate workflows. Visit **Personal settings** → **Bots** to get started.
+  </Step>
+  
+  <Step title="Learn advanced features">
+    Explore [all features](/features) including message formatting, search operators, and power user shortcuts.
+  </Step>
+</Steps>
+
+<div className="bg-gradient-to-r from-[#5c9cfc]/10 to-[#747bfc]/10 rounded-lg p-6 my-6">
+  <h3 className="text-lg font-semibold mb-2">Welcome to Zulip! 🎉</h3>
+  <p className="mb-4">
+    You're now ready to use Zulip effectively. Remember, it might feel a bit different from other chat apps at first, but the topic-based organization will soon feel natural—and you'll wonder how you ever lived without it!
+  </p>
+  <p>
+    If you have questions, the Zulip community is always here to help at <a href="https://chat.zulip.org">chat.zulip.org</a>.
+  </p>
+</div>

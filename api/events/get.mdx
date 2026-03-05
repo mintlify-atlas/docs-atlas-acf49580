@@ -1,0 +1,308 @@
+---
+title: 'Get Events'
+description: 'GET /api/v1/events - Fetch events from a registered queue'
+---
+
+## Endpoint
+
+```
+GET /api/v1/events
+```
+
+Fetch new events from a [registered event queue](/api/events/register).
+
+## Request Parameters
+
+<ParamField query="queue_id" type="string" required>
+  The ID of the event queue (from POST /register).
+</ParamField>
+
+<ParamField query="last_event_id" type="integer" required>
+  The highest event ID you've received and processed.
+  
+  Use `-1` for the first request after registering.
+</ParamField>
+
+<ParamField query="dont_block" type="boolean" default="false">
+  If true, return immediately even if no events are available.
+  
+  If false, the server will hold the connection open until events arrive (long-polling).
+</ParamField>
+
+## Response
+
+<ResponseField name="events" type="array" required>
+  Array of event objects with IDs newer than `last_event_id`.
+</ResponseField>
+
+### Event Object
+
+<ResponseField name="id" type="integer">
+  Unique event ID (always increasing).
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Event type (e.g., "message", "subscription", "presence").
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET 'https://your-domain.zulipchat.com/api/v1/events?queue_id=1517975029:0&last_event_id=-1' \
+  -u email@example.com:API_KEY
+```
+
+```python Python - Automatic (Recommended)
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Easiest way: library handles everything
+def handle_message(msg):
+    print(f"{msg['sender_full_name']}: {msg['content']}")
+
+client.call_on_each_message(handle_message)
+```
+
+```python Python - Manual
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Register queue first
+register_result = client.register(event_types=["message"])
+queue_id = register_result['queue_id']
+last_event_id = -1
+
+# Poll for events
+while True:
+    result = client.get_events(
+        queue_id=queue_id,
+        last_event_id=last_event_id
+    )
+    
+    for event in result['events']:
+        if event['type'] == 'message':
+            msg = event['message']
+            print(f"{msg['sender_full_name']}: {msg['content']}")
+        
+        # Update last_event_id
+        last_event_id = max(last_event_id, event['id'])
+```
+
+```javascript JavaScript
+const result = await client.events.retrieve({
+  queue_id: '1517975029:0',
+  last_event_id: -1
+});
+
+for (const event of result.events) {
+  console.log('Event:', event.type, event);
+}
+```
+
+</CodeGroup>
+
+## Response Example
+
+<ResponseExample>
+
+```json Message Event
+{
+  "result": "success",
+  "msg": "",
+  "events": [
+    {
+      "type": "message",
+      "id": 0,
+      "message": {
+        "id": 12345,
+        "sender_id": 10,
+        "sender_full_name": "Alice",
+        "sender_email": "alice@example.com",
+        "type": "stream",
+        "stream_id": 5,
+        "subject": "API Discussion",
+        "content": "<p>Hello from the Zulip API!</p>",
+        "timestamp": 1594825416,
+        "client": "website",
+        "display_recipient": "general",
+        "reactions": [],
+        "flags": []
+      },
+      "flags": []
+    }
+  ]
+}
+```
+
+```json Subscription Event
+{
+  "result": "success",
+  "msg": "",
+  "events": [
+    {
+      "type": "subscription",
+      "id": 1,
+      "op": "add",
+      "subscriptions": [
+        {
+          "name": "engineering",
+          "stream_id": 42,
+          "description": "Engineering team channel",
+          "invite_only": false,
+          "is_web_public": false,
+          "subscribers": [10, 15, 20]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```json Presence Event
+{
+  "result": "success",
+  "msg": "",
+  "events": [
+    {
+      "type": "presence",
+      "id": 2,
+      "user_id": 10,
+      "email": "alice@example.com",
+      "server_timestamp": 1594825445.320078,
+      "presence": {
+        "website": {
+          "client": "website",
+          "status": "active",
+          "timestamp": 1594825445
+        }
+      }
+    }
+  ]
+}
+```
+
+```json No New Events
+{
+  "result": "success",
+  "msg": "",
+  "events": []
+}
+```
+
+</ResponseExample>
+
+## Long-Polling
+
+By default, this endpoint uses long-polling:
+
+- Server holds the connection open until events arrive
+- Connection times out after ~90 seconds if no events
+- Client should immediately reconnect after response
+- Provides real-time updates with minimal overhead
+
+```python Long-Polling Example
+while True:
+    # This blocks until events arrive or timeout
+    result = client.get_events(
+        queue_id=queue_id,
+        last_event_id=last_event_id
+    )
+    
+    # Process events immediately
+    for event in result['events']:
+        process_event(event)
+        last_event_id = event['id']
+    
+    # Loop immediately reconnects
+```
+
+## Error Handling
+
+<AccordionGroup>
+  <Accordion title="Queue Expired (BAD_EVENT_QUEUE_ID)">
+    The event queue has expired (usually after 10 minutes of inactivity).
+    
+    **Solution**: Register a new queue with POST /register.
+    
+    ```python
+    try:
+        result = client.get_events(queue_id=queue_id, last_event_id=last_event_id)
+    except zulip.ZulipError as e:
+        if e.code == 'BAD_EVENT_QUEUE_ID':
+            # Re-register
+            register_result = client.register()
+            queue_id = register_result['queue_id']
+            last_event_id = -1
+    ```
+  </Accordion>
+  
+  <Accordion title="Invalid Event ID">
+    The last_event_id is invalid or too old.
+    
+    **Solution**: Use the `last_event_id` from the register response.
+  </Accordion>
+  
+  <Accordion title="Connection Timeout">
+    Long-poll request timed out (normal behavior).
+    
+    **Solution**: Immediately make a new request. This is expected.
+  </Accordion>
+</AccordionGroup>
+
+## Event Processing
+
+```python Event Processing Pattern
+def process_events():
+    client = zulip.Client(config_file="~/.zuliprc")
+    
+    # Register queue
+    result = client.register(event_types=["message", "reaction"])
+    queue_id = result['queue_id']
+    last_event_id = -1
+    
+    while True:
+        try:
+            # Get events
+            events_result = client.get_events(
+                queue_id=queue_id,
+                last_event_id=last_event_id
+            )
+            
+            # Process each event
+            for event in events_result['events']:
+                if event['type'] == 'message':
+                    handle_message(event['message'])
+                elif event['type'] == 'reaction':
+                    handle_reaction(event)
+                
+                # Track highest event ID
+                last_event_id = max(last_event_id, event['id'])
+                
+        except KeyboardInterrupt:
+            print("Shutting down...")
+            break
+        except Exception as e:
+            print(f"Error: {e}")
+            # Re-register on error
+            result = client.register(event_types=["message", "reaction"])
+            queue_id = result['queue_id']
+            last_event_id = -1
+```
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Register Queue" icon="plus" href="/api/events/register">
+    Create an event queue
+  </Card>
+  <Card title="Delete Queue" icon="trash" href="/api/events/delete">
+    Delete an event queue
+  </Card>
+  <Card title="Send Message" icon="paper-plane" href="/api/messages/send">
+    Respond to message events
+  </Card>
+</CardGroup>

@@ -1,0 +1,683 @@
+---
+title: Adding a New Feature
+description: Step-by-step tutorial for adding a complete feature to Zulip
+---
+
+This tutorial walks through adding a new feature to Zulip from start to finish. We'll add a new realm (organization) setting that is synced in real-time to all connected clients.
+
+<Note>
+This tutorial teaches the complete flow: database, backend, frontend, tests, and documentation. You'll understand how all pieces of Zulip work together.
+</Note>
+
+## Overview
+
+We'll add a boolean setting called `my_fantastic_feature` to demonstrate:
+
+- Database schema changes
+- Backend API implementation  
+- Real-time event system
+- Frontend UI integration
+- Comprehensive testing
+- API documentation
+
+By the end, you'll have a working feature with a toggle in organization settings.
+
+## Prerequisites
+
+- [Zulip development environment](/development/setup) set up
+- Familiarity with Django and JavaScript
+- Understanding of [Zulip's architecture](/overview/architecture)
+
+## Step 1: Plan the Feature
+
+Before coding, understand the requirements:
+
+- **What**: A realm-level boolean setting
+- **Who**: Organization administrators can toggle it
+- **Where**: Organization settings page
+- **How**: Real-time sync to all clients
+
+<Tip>
+Use `git grep` to find similar features. For realm settings, search for existing booleans like `allow_message_editing`.
+</Tip>
+
+## Step 2: Update the Database Model
+
+### Add Field to Model
+
+Edit `zerver/models/realms.py`:
+
+```python
+class Realm(models.Model):
+    # ...
+    require_unique_names = models.BooleanField(default=False)
+    name_changes_disabled = models.BooleanField(default=False)
+    email_changes_disabled = models.BooleanField(default=False)
+    avatar_changes_disabled = models.BooleanField(default=False)
+
+    # My fantastic feature for the new feature tutorial.
+    my_fantastic_feature = models.BooleanField(default=False)
+```
+
+### Add to Property Types
+
+The `property_types` framework auto-handles most realm settings:
+
+```python
+class Realm(models.Model):
+    # ...
+    # Define the types of the various automatically managed properties
+    property_types: dict[str, type | UnionType] = dict(
+        allow_message_editing=bool,
+        avatar_changes_disabled=bool,
+        # ...
+        my_fantastic_feature=bool,
+        # ...
+    )
+```
+
+<Note>
+Most realm settings use `property_types`. Complex settings (ForeignKey fields, dependent settings) need custom code.
+</Note>
+
+### Create Migration
+
+<Steps>
+  <Step title="Generate migration">
+    ```bash
+    ./manage.py makemigrations
+    ```
+    
+    Creates: `zerver/migrations/NNNN_my_fantastic_feature.py`
+  </Step>
+  
+  <Step title="Commit migration">
+    ```bash
+    git add zerver/migrations/NNNN_my_fantastic_feature.py
+    ```
+  </Step>
+  
+  <Step title="Apply migration">
+    ```bash
+    ./manage.py migrate
+    ```
+    
+    Output:
+    ```
+    Applying zerver.NNNN_my_fantastic_feature... OK
+    ```
+  </Step>
+  
+  <Step title="Restart server">
+    Restart the development server to load the new schema.
+  </Step>
+</Steps>
+
+## Step 3: Backend Implementation
+
+### How property_types Works
+
+For settings in `property_types`, Zulip automatically:
+
+1. **Updates database** via `do_set_realm_property` in `zerver/actions/realm_settings.py`
+2. **Sends events** to notify connected clients
+3. **Validates** type safety
+
+You don't need to write this code, but understanding it helps:
+
+```python
+# zerver/actions/realm_settings.py
+
+def do_set_realm_property(
+    realm: Realm,
+    name: str,
+    value: Any,
+    *,
+    acting_user: UserProfile | None,
+) -> None:
+    """Update a realm property and send event."""
+    # Validate type
+    property_type = Realm.property_types[name]
+    if not isinstance(value, property_type):
+        raise AssertionError(
+            f"Invalid type for {name}: {type(value)} != {property_type}"
+        )
+    
+    # Update database
+    old_value = getattr(realm, name)
+    setattr(realm, name, value)
+    realm.save(update_fields=[name])
+    
+    # Send event
+    event = dict(
+        type="realm",
+        op="update",
+        property=name,
+        value=value,
+    )
+    send_event_on_commit(realm, event, active_user_ids(realm.id))
+```
+
+### Update Application State
+
+**`zerver/lib/events.py`** handles state for clients.
+
+For `property_types` fields, this is automatic:
+
+```python
+def fetch_initial_state_data(
+    user_profile: UserProfile | None,
+    # ...
+) -> dict[str, Any]:
+    if want("realm"):
+        # ...
+        # Automatically includes all property_types
+        for property_name in Realm.property_types:
+            state["realm_" + property_name] = getattr(realm, property_name)
+```
+
+The `apply_events` function also handles it automatically:
+
+```python
+def apply_event(
+    user_profile: UserProfile,
+    state: dict[str, Any],
+    event: dict[str, Any],
+) -> None:
+    # ...
+    elif event["type"] == "realm":
+        if event["op"] == "update":
+            field = "realm_" + event["property"]
+            state[field] = event["value"]
+```
+
+### Add View Endpoint
+
+Update `zerver/views/realm.py` to accept the new parameter:
+
+```python
+@require_realm_admin
+@typed_endpoint
+def update_realm(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    allow_message_editing: Json[bool] | None = None,
+    authentication_methods: Json[dict[str, Any]] | None = None,
+    # ...
+    my_fantastic_feature: Json[bool] | None = None,
+    # ...
+):
+    # ...
+```
+
+The existing loop in `update_realm` automatically processes it:
+
+```python
+# Handles all property_types automatically
+for key in Realm.property_types:
+    value = locals().get(key)
+    if value is not None:
+        do_set_realm_property(realm, key, value, acting_user=user_profile)
+```
+
+## Step 4: Frontend Implementation
+
+### Update State Schema
+
+Define the frontend's expectation of realm data in `web/src/state_data.ts`:
+
+```typescript
+// Sync this with zerver.lib.events.do_events_register.
+export const realm_schema = z.object({
+    // ...
+    realm_move_messages_within_stream_limit_seconds: z.nullable(z.number()),
+    realm_my_fantastic_feature: z.boolean(),
+    realm_name_changes_disabled: z.boolean(),
+    // ...
+});
+```
+
+### Add UI Control
+
+Add checkbox to organization settings in `web/templates/settings/organization_settings_admin.hbs`:
+
+```handlebars
+{{!-- In the "Message feed" section --}}
+{{> settings_checkbox
+    setting_name="my_fantastic_feature"
+    label="Enable my fantastic feature"
+    is_checked=realm_my_fantastic_feature
+    prefix="realm_"}}
+```
+
+### Wire Up Form Data
+
+Provide initial value in `web/src/admin.ts`:
+
+```javascript
+export function build_page() {
+    const options = {
+        custom_profile_field_types: realm.custom_profile_field_types,
+        full_name: current_user.full_name,
+        // ...
+        realm_my_fantastic_feature: realm.realm_my_fantastic_feature,
+        // ...
+    };
+    // ...
+}
+```
+
+Add label:
+
+```javascript
+const admin_settings_label = {
+    // ...
+    my_fantastic_feature: $t({defaultMessage: "Enable my fantastic feature"}),
+    // ...
+};
+```
+
+### Handle Events
+
+Update `web/src/server_events_dispatch.js` to handle change events:
+
+```javascript
+function dispatch_normal_event(event) {
+    switch (event.type) {
+    // ...
+    case 'realm':
+        var realm_settings = {
+            add_custom_emoji_policy: settings_emoji.update_custom_emoji_ui,
+            allow_edit_history: noop,
+            // ...
+            my_fantastic_feature: noop,  // or custom handler
+            // ...
+        };
+```
+
+Use `noop` if no special UI update is needed beyond the settings page itself.
+
+## Step 5: Implement Your Feature
+
+Now that the setting infrastructure is ready, implement what your feature actually does!
+
+Some ideas:
+
+```javascript
+// Change font in message feed
+if (realm.realm_my_fantastic_feature) {
+    $("#message_feed_container").addClass("fantastic-font");
+}
+```
+
+```css
+/* web/styles/zulip.css */
+.fantastic-font {
+    font-family: "Comic Sans MS", cursive;
+}
+```
+
+Or something more useful! This is where you get creative.
+
+## Step 6: Backend Tests
+
+### Test Event System
+
+For `property_types` settings, basic event tests are automatic. Verify in `zerver/tests/test_events.py`:
+
+```python
+# Already tested by do_set_realm_property_test
+# Boolean values automatically tested with True and False
+```
+
+Test actually works:
+
+```bash
+./tools/test-backend zerver.tests.test_events.RealmPropertyActionTest.test_change_realm_property
+```
+
+### Test API Endpoint
+
+Add to `zerver/tests/test_realm.py`:
+
+```python
+class RealmTest(ZulipTestCase):
+    def test_update_my_fantastic_feature(self) -> None:
+        realm = get_realm('zulip')
+        self.assertFalse(realm.my_fantastic_feature)
+        
+        # Enable feature
+        self.login('iago')  # Admin user
+        result = self.client_patch('/json/realm', {
+            'my_fantastic_feature': 'true'
+        })
+        self.assert_json_success(result)
+        
+        # Verify database updated
+        realm = get_realm('zulip')
+        self.assertTrue(realm.my_fantastic_feature)
+        
+    def test_non_admin_cannot_update(self) -> None:
+        """Test permission check."""
+        self.login('hamlet')  # Regular user
+        result = self.client_patch('/json/realm', {
+            'my_fantastic_feature': 'true'
+        })
+        self.assert_json_error(result, "Must be an organization administrator")
+```
+
+Run tests:
+
+```bash
+./tools/test-backend zerver.tests.test_realm.RealmTest
+```
+
+## Step 7: Frontend Tests
+
+### Update Test Fixtures
+
+Add to `web/tests/lib/example_realm.cjs`:
+
+```javascript
+exports.realm = {
+    realm_allow_edit_history: true,
+    realm_allow_message_editing: true,
+    // ...
+    realm_my_fantastic_feature: false,
+    // ...
+};
+```
+
+### Test Event Handling
+
+Add to `web/tests/dispatch.test.cjs`:
+
+```javascript
+run_test("my_fantastic_feature", ({override}) => {
+    const event = {
+        type: "realm",
+        op: "update",
+        property: "my_fantastic_feature",
+        value: true,
+    };
+    
+    override(realm, "realm_my_fantastic_feature", false);
+    dispatch(event);
+    assert.equal(realm.realm_my_fantastic_feature, true);
+});
+```
+
+Run tests:
+
+```bash
+./tools/test-js-with-node dispatch
+```
+
+### End-to-End Test (Optional)
+
+Add to `web/e2e-tests/admin.test.ts`:
+
+```typescript
+async function test_my_fantastic_feature(page: Page): Promise<void> {
+    await common.log_in(page);
+    await page.goto("http://localhost:9991/#organization/settings");
+    
+    // Toggle setting
+    await page.waitForSelector("#id_realm_my_fantastic_feature", {visible: true});
+    await page.click("#id_realm_my_fantastic_feature");
+    
+    // Save
+    await page.click(".save-button");
+    await page.waitForSelector(".alert-success", {visible: true});
+    
+    // Verify UI changed
+    // Check your feature's visible effect
+}
+```
+
+## Step 8: Documentation
+
+### API Documentation
+
+Update `zerver/openapi/zulip.yaml`:
+
+```yaml
+/realm:
+  patch:
+    parameters:
+      # ...
+      - name: my_fantastic_feature
+        in: query
+        description: |
+          Enable my fantastic feature.
+          
+          **Changes**: New in Zulip X.0 (feature level NNN).
+        schema:
+          type: boolean
+        example: true
+```
+
+### Create Changelog Entry
+
+Run the helper script:
+
+```bash
+./tools/create-api-changelog
+```
+
+Edit generated file in `api_docs/changelog.md`:
+
+```markdown
+## Zulip X.0 (feature level NNN)
+
+**Feature level NNN**
+
+* [`PATCH /realm`](/api/update-realm): Added `my_fantastic_feature`
+  parameter to enable the fantastic feature.
+```
+
+### User Documentation
+
+Update or create help center article in `starlight_help/`:
+
+```markdown
+# Customize organization settings
+
+<!-- Existing content -->
+
+## My Fantastic Feature
+
+Enable this setting to activate the fantastic feature:
+
+1. Go to **Organization settings**.
+2. Under **Message feed**, toggle **Enable my fantastic feature**.
+3. Click **Save changes**.
+```
+
+## Step 9: Manual Testing
+
+<Steps>
+  <Step title="Start development server">
+    ```bash
+    ./tools/run-dev
+    ```
+  </Step>
+  
+  <Step title="Log in as admin">
+    Email: `iago@zulip.com`
+    
+    Password: Check terminal output
+  </Step>
+  
+  <Step title="Open organization settings">
+    Click gear icon → **Organization settings**
+  </Step>
+  
+  <Step title="Toggle your feature">
+    Find "Enable my fantastic feature" checkbox
+    
+    Click to enable
+    
+    Click **Save changes**
+  </Step>
+  
+  <Step title="Verify in another browser">
+    Open incognito/private window
+    
+    Log in as same user
+    
+    Setting should already be enabled (real-time sync!)
+  </Step>
+</Steps>
+
+### Test Real-Time Sync
+
+Open two browser windows side by side:
+
+1. Toggle setting in one window
+2. Watch it update in the other window
+3. Verify no page refresh needed
+
+### Test Permissions
+
+Log in as non-admin (`hamlet@zulip.com`) and verify:
+
+- Settings page shows current value
+- Cannot modify the setting
+- Sees changes made by admins in real-time
+
+## Step 10: Code Review Checklist
+
+Before submitting:
+
+- [ ] All tests pass: `./tools/test-backend` and `./tools/test-js-with-node`
+- [ ] Linters pass: `./tools/lint`
+- [ ] Migration file committed
+- [ ] API docs updated in `zulip.yaml`
+- [ ] Changelog entry created
+- [ ] User documentation updated
+- [ ] Tested in browser (including real-time sync)
+- [ ] Tested permissions
+- [ ] Git commits are clear and logical
+
+## Common Patterns
+
+### Non-Boolean Settings
+
+For integers:
+
+```python
+# models.py
+max_file_size_mb = models.IntegerField(default=25)
+
+# property_types
+property_types = dict(
+    max_file_size_mb=int,
+)
+```
+
+For strings:
+
+```python
+# models.py  
+welcome_message = models.CharField(max_length=200, default="Welcome!")
+
+# property_types
+property_types = dict(
+    welcome_message=str,
+)
+
+# views.py - add validation
+if welcome_message is not None:
+    if len(welcome_message) > 200:
+        raise JsonableError(_("Message too long"))
+```
+
+### Settings Not in property_types
+
+For ForeignKey or complex settings:
+
+```python
+# actions.py - create custom function
+def do_set_my_complex_setting(
+    realm: Realm,
+    value: ComplexType,
+    *,
+    acting_user: UserProfile | None,
+) -> None:
+    old_value = realm.my_complex_setting
+    realm.my_complex_setting = value
+    realm.save(update_fields=["my_complex_setting"])
+    
+    event = dict(
+        type="realm",
+        op="update",
+        property="my_complex_setting",
+        value=serialize_value(value),
+    )
+    send_event_on_commit(realm, event, active_user_ids(realm.id))
+
+# views.py - call explicitly
+if my_complex_setting is not None:
+    do_set_my_complex_setting(
+        realm, my_complex_setting, acting_user=user_profile
+    )
+```
+
+## Tips and Tricks
+
+### Using git grep
+
+Find similar code:
+
+```bash
+# Find where a setting is used
+git grep "allow_message_editing"
+
+# Find all realm settings in tests
+git grep "def test.*realm" zerver/tests/
+
+# Find event handlers
+git grep "dispatch_normal_event" web/src/
+```
+
+### Debugging Events
+
+Add logging:
+
+```python
+# zerver/lib/events.py
+logger.info(f"Sending event: {event}")
+```
+
+```javascript
+// web/src/server_events_dispatch.js  
+console.log("Received event:", event);
+```
+
+### Database Console
+
+```bash
+./manage.py shell
+
+>>> from zerver.models import Realm
+>>> realm = Realm.objects.get(string_id='zulip')
+>>> realm.my_fantastic_feature
+False
+>>> realm.my_fantastic_feature = True
+>>> realm.save()
+```
+
+## Next Steps
+
+Now that you understand the complete feature development flow:
+
+- Read [Event System](/development/architecture/realtime-events) for deep dive
+- Explore [Testing Philosophy](/testing/philosophy) for testing strategy
+- Check [API Documentation](/documentation/api) for API docs details
+- Review [Code Style Guide](/contributing/code-style) for best practices
+
+## Share Your Work!
+
+If you created something cool while following this tutorial, share a screenshot in the [Zulip development community](https://chat.zulip.org/#narrow/channel/95-new-members)!

@@ -1,0 +1,203 @@
+---
+title: 'Integrations Overview'
+description: 'Overview of Zulip integration patterns'
+---
+
+## Integration Types
+
+Zulip supports several integration patterns to connect with external services:
+
+<CardGroup cols={2}>
+  <Card title="Incoming Webhooks" icon="webhook" href="/api/integrations/incoming-webhooks">
+    Receive notifications from external services
+  </Card>
+  <Card title="Outgoing Webhooks" icon="arrow-up-right-from-square" href="/api/integrations/outgoing-webhooks">
+    Send Zulip events to external services
+  </Card>
+  <Card title="Bots" icon="robot" href="/api/integrations/bots">
+    Build interactive bots that respond to messages
+  </Card>
+  <Card title="REST API" icon="code" href="/api/overview">
+    Direct API integration for full control
+  </Card>
+</CardGroup>
+
+## Choosing an Integration Type
+
+<AccordionGroup>
+  <Accordion title="Incoming Webhooks - Get data into Zulip">
+    Best for:
+    - Receiving notifications from external services (GitHub, GitLab, etc.)
+    - Automated alerts and monitoring
+    - CI/CD pipeline notifications
+    - One-way data flow into Zulip
+    
+    Examples:
+    - GitHub pull request notifications
+    - Datadog alerts
+    - Deployment notifications
+  </Accordion>
+  
+  <Accordion title="Outgoing Webhooks - Send data from Zulip">
+    Best for:
+    - Triggering actions when messages are sent
+    - Command-based integrations (@bot do something)
+    - Forwarding messages to external systems
+    - Two-way communication
+    
+    Examples:
+    - Translation bots
+    - Task creation in external systems
+    - Custom slash commands
+  </Accordion>
+  
+  <Accordion title="Bots - Interactive applications">
+    Best for:
+    - Complex interactive features
+    - Stateful conversations
+    - Real-time responses to messages
+    - Full access to Zulip data
+    
+    Examples:
+    - Help desk bots
+    - Poll/survey bots
+    - Game bots
+    - Custom commands and workflows
+  </Accordion>
+  
+  <Accordion title="REST API - Full control">
+    Best for:
+    - Custom applications
+    - Data synchronization
+    - Administration and user management
+    - Building custom clients
+    
+    Examples:
+    - Analytics dashboards
+    - User provisioning
+    - Custom mobile/web apps
+    - Data exports
+  </Accordion>
+</AccordionGroup>
+
+## Pre-built Integrations
+
+Zulip includes 100+ native integrations for popular services:
+
+### Development Tools
+- GitHub, GitLab, Bitbucket
+- Jenkins, CircleCI, Travis CI
+- Sentry, Rollbar
+- Jira, Linear
+
+### Monitoring & Alerting
+- Datadog, New Relic
+- PagerDuty, Opsgenie
+- Prometheus, Grafana
+- Nagios, Zabbix
+
+### Project Management
+- Asana, Trello
+- Monday.com
+- ClickUp
+
+### Communication
+- Email (incoming)
+- RSS/Atom feeds
+- Twitter
+
+<Card title="View All Integrations" icon="grid" href="/integrations">
+  Browse the complete integration directory
+</Card>
+
+## Quick Start Guides
+
+<Steps>
+  <Step title="Choose Integration Type">
+    Decide which integration pattern fits your use case best.
+  </Step>
+  
+  <Step title="Create Bot Account (if needed)">
+    For outgoing webhooks and bots, create a bot user in Zulip settings.
+  </Step>
+  
+  <Step title="Get Credentials">
+    Obtain API key or webhook URL from Zulip.
+  </Step>
+  
+  <Step title="Configure External Service">
+    Set up the external service to send data to Zulip or receive from it.
+  </Step>
+  
+  <Step title="Test Integration">
+    Send test data to verify the integration works.
+  </Step>
+</Steps>
+
+## Development Resources
+
+<CardGroup cols={2}>
+  <Card title="Client Libraries" icon="code" href="/api/client-libraries">
+    Official Python and JavaScript libraries
+  </Card>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    API key setup and security
+  </Card>
+  <Card title="Message Formatting" icon="text" href="/help/format-your-message-using-markdown">
+    Zulip-flavored Markdown guide
+  </Card>
+  <Card title="Examples" icon="book" href="https://github.com/zulip/python-zulip-api/tree/main/zulip_bots">
+    Sample bots and integrations
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<Check>
+  **Use bot accounts** for integrations instead of personal accounts
+</Check>
+
+<Check>
+  **Channel organization** - Create dedicated channels for integration notifications
+</Check>
+
+<Check>
+  **Message formatting** - Use Zulip's Markdown for rich, readable messages
+</Check>
+
+<Check>
+  **Error handling** - Implement retries and graceful failures
+</Check>
+
+<Check>
+  **Rate limiting** - Respect API rate limits and implement backoff
+</Check>
+
+<Warning>
+  Store API keys securely. Never commit them to version control.
+</Warning>
+
+## Community Support
+
+Need help with integrations?
+
+- Visit the [Zulip development community](https://zulip.com/development-community/)
+- Check the [integrations documentation](https://zulip.readthedocs.io/en/latest/webhooks/incoming-webhooks-overview.html)
+- Browse [example integrations](https://github.com/zulip/python-zulip-api)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Incoming Webhooks" icon="webhook" href="/api/integrations/incoming-webhooks">
+    Set up webhook notifications
+  </Card>
+  <Card title="Build a Bot" icon="robot" href="/api/integrations/bots">
+    Create an interactive bot
+  </Card>
+  <Card title="Outgoing Webhooks" icon="arrow-up-right" href="/api/integrations/outgoing-webhooks">
+    Forward messages to external services
+  </Card>
+  <Card title="REST API" icon="code" href="/api/messages/send">
+    Start with the REST API
+  </Card>
+</CardGroup>

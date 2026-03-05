@@ -1,0 +1,352 @@
+---
+title: Email Configuration
+description: Configure outgoing email (SMTP) for your Zulip server
+---
+
+Zulip needs to send email to confirm new users' email addresses and send notifications. This guide explains how to configure outgoing email for your Zulip server.
+
+## Quick setup
+
+<Steps>
+  <Step title="Choose an SMTP provider">
+    Select an outgoing email service. We recommend free transactional email services:
+
+    - [Mailgun](https://documentation.mailgun.com/docs/mailgun/user-manual/sending-messages/send-smtp)
+    - [SendGrid](https://www.twilio.com/docs/sendgrid/for-developers/sending-email/integrating-with-the-smtp-api)
+    - [Amazon SES](https://docs.aws.amazon.com/ses/latest/dg/send-email-smtp.html) (for AWS users)
+  </Step>
+
+  <Step title="Configure SMTP settings">
+    Edit `/etc/zulip/settings.py`:
+
+    ```python
+    EMAIL_HOST = 'smtp.mailgun.org'
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = 'username@example.com'
+    EMAIL_USE_TLS = True
+
+    # Noreply email configuration
+    NOREPLY_EMAIL_ADDRESS = 'noreply@zulip.example.com'
+    ```
+  </Step>
+
+  <Step title="Add email password">
+    Edit `/etc/zulip/zulip-secrets.conf`:
+
+    ```ini
+    email_password = your_smtp_password
+    ```
+  </Step>
+
+  <Step title="Configure sender addresses">
+    Ensure your SMTP server allows sending from:
+    - `ZULIP_ADMINISTRATOR` (set in `/etc/zulip/settings.py`)
+    - `NOREPLY_EMAIL_ADDRESS`
+    - `TOKENIZED_NOREPLY_EMAIL_ADDRESS` (if `ADD_TOKENS_TO_NOREPLY_ADDRESS=True`)
+  </Step>
+
+  <Step title="Test configuration">
+    ```bash
+    su zulip -c '/home/zulip/deployments/current/manage.py send_test_email user@example.com'
+    ```
+
+    You should receive two test emails.
+  </Step>
+
+  <Step title="Restart server">
+    ```bash
+    su zulip -c '/home/zulip/deployments/current/scripts/restart-server'
+    ```
+  </Step>
+</Steps>
+
+## Email service providers
+
+### Free transactional email services
+
+Transactional email services are designed for server-generated emails and are the easiest way to get outgoing email working reliably.
+
+<Tabs>
+  <Tab title="Mailgun">
+    **Mailgun** has the best documentation for SMTP setup.
+
+    Configuration:
+    ```python
+    EMAIL_HOST = 'smtp.mailgun.org'
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = 'postmaster@mg.example.com'
+    EMAIL_USE_TLS = True
+    ```
+
+    In `/etc/zulip/zulip-secrets.conf`:
+    ```ini
+    email_password = your_mailgun_smtp_password
+    ```
+  </Tab>
+
+  <Tab title="SendGrid">
+    **SendGrid** (now part of Twilio) offers reliable SMTP service.
+
+    Configuration:
+    ```python
+    EMAIL_HOST = 'smtp.sendgrid.net'
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = 'apikey'
+    EMAIL_USE_TLS = True
+    ```
+
+    In `/etc/zulip/zulip-secrets.conf`:
+    ```ini
+    email_password = your_sendgrid_api_key
+    ```
+  </Tab>
+
+  <Tab title="Amazon SES">
+    **Amazon SES** is ideal if you're running on AWS.
+
+    Configuration:
+    ```python
+    EMAIL_HOST = 'email-smtp.us-east-1.amazonaws.com'
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = 'your_ses_smtp_username'
+    EMAIL_USE_TLS = True
+    ```
+
+    In `/etc/zulip/zulip-secrets.conf`:
+    ```ini
+    email_password = your_ses_smtp_password
+    ```
+  </Tab>
+</Tabs>
+
+### Using system email
+
+If you have a local `postfix` or similar SMTP server:
+
+```python
+EMAIL_HOST = 'localhost'
+EMAIL_PORT = 25
+EMAIL_USE_TLS = False
+EMAIL_HOST_USER = ""
+```
+
+<Warning>
+Modern spam filtering is very aggressive. Ensure your downstream email system properly signs outgoing email from your Zulip server (DKIM/SPF), or check your spam folder.
+</Warning>
+
+### Using Gmail (not recommended)
+
+We don't recommend using Gmail for server email, but if necessary:
+
+<Steps>
+  <Step title="Create dedicated account">
+    Create a new Gmail account specifically for your Zulip server.
+  </Step>
+
+  <Step title="Enable app-specific password">
+    If using 2-factor authentication, create an [app-specific password](https://support.google.com/accounts/answer/185833).
+
+    If not using 2FA, enable ["less secure" app access](https://support.google.com/accounts/answer/6010255).
+  </Step>
+
+  <Step title="Configure settings">
+    ```python
+    EMAIL_HOST = 'smtp.gmail.com'
+    EMAIL_PORT = 587
+    EMAIL_HOST_USER = 'your-zulip-bot@gmail.com'
+    EMAIL_USE_TLS = True
+    ```
+  </Step>
+</Steps>
+
+<Note>
+Gmail has low rate limits (~100 emails/day), making it unsuitable for active servers.
+</Note>
+
+## Email configuration options
+
+### SSL/TLS settings
+
+Most SMTP providers use STARTTLS on port 587:
+
+```python
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+```
+
+Some providers use implicit SSL on port 465:
+
+```python
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True
+# Remove or comment out EMAIL_USE_TLS
+```
+
+### Noreply email addresses
+
+Configure the sender addresses for system emails:
+
+```python
+# Main noreply address
+NOREPLY_EMAIL_ADDRESS = 'noreply@zulip.example.com'
+
+# Add random tokens to from addresses (recommended)
+ADD_TOKENS_TO_NOREPLY_ADDRESS = True
+
+# Tokenized noreply address pattern
+TOKENIZED_NOREPLY_EMAIL_ADDRESS = 'noreply-{token}@zulip.example.com'
+```
+
+<Note>
+Tokenized noreply addresses help protect against [helpdesk attack vectors](https://medium.com/intigriti/how-i-hacked-hundreds-of-companies-through-their-helpdesk-b7680ddc2d4c). Only disable if your SMTP provider doesn't support this pattern.
+</Note>
+
+### Custom sender name
+
+Customize the display name in outgoing emails:
+
+```python
+INSTALLATION_NAME = 'ExampleCorp Zulip'
+```
+
+Emails will appear from:
+```
+ExampleCorp Zulip <noreply@zulip.example.com>
+```
+
+## Testing email configuration
+
+Test your configuration with:
+
+```bash
+su zulip -c '/home/zulip/deployments/current/manage.py send_test_email user@example.com'
+```
+
+You should receive:
+1. An email from your `ZULIP_ADMINISTRATOR` address
+2. An email from your `NOREPLY_EMAIL_ADDRESS`
+
+If you don't receive emails, check:
+
+- Your spam/junk folder
+- `/var/log/zulip/send_email.log` for send attempts
+- `/var/log/zulip/errors.log` for exceptions
+- Your SMTP provider's dashboard for delivery logs
+
+## Troubleshooting
+
+### Common issues
+
+<AccordionGroup>
+  <Accordion title="No emails received">
+    **Check firewall**: Ensure outgoing SMTP port isn't blocked
+
+    ```bash
+    # Test connectivity
+    telnet smtp.mailgun.org 587
+    ```
+
+    **Check credentials**: Verify username and password in settings
+
+    **Check logs**:
+    ```bash
+    tail -f /var/log/zulip/send_email.log
+    tail -f /var/log/zulip/errors.log
+    ```
+  </Accordion>
+
+  <Accordion title="SMTP authentication failed">
+    - Verify `EMAIL_HOST_USER` is correct
+    - Check `email_password` in `/etc/zulip/zulip-secrets.conf`
+    - Ensure no extra whitespace in credentials
+  </Accordion>
+
+  <Accordion title="Noreply address rejected">
+    Your SMTP provider may not allow sending from `noreply-{random}@` addresses.
+
+    **Solution**: Disable tokenized addresses:
+    ```python
+    ADD_TOKENS_TO_NOREPLY_ADDRESS = False
+    ```
+
+    <Warning>
+    Only do this if absolutely necessary, as it reduces security.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Emails go to spam">
+    Configure proper email authentication:
+    - Set up SPF records in DNS
+    - Configure DKIM signing
+    - Set up DMARC policy
+
+    Your transactional email provider will guide you through this.
+  </Accordion>
+</AccordionGroup>
+
+### Advanced troubleshooting
+
+Check SMTP connectivity:
+
+```bash
+# Test connection
+openssl s_client -connect smtp.mailgun.org:587 -starttls smtp
+```
+
+View detailed email logs:
+
+```bash
+# All email send attempts
+tail -100 /var/log/zulip/send_email.log
+
+# Email-related errors
+grep -i email /var/log/zulip/errors.log
+```
+
+## Prototyping without email
+
+For development or testing, log emails to files instead of sending:
+
+```python
+EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+EMAIL_FILE_PATH = '/var/log/zulip/emails'
+```
+
+Emails will be written to `/var/log/zulip/emails/` as files.
+
+<Warning>
+Remember to remove this configuration when setting up a real SMTP provider!
+</Warning>
+
+## Email security
+
+### Protecting credentials
+
+- Never commit `/etc/zulip/zulip-secrets.conf` to version control
+- Use environment-specific secrets files
+- Rotate SMTP passwords periodically
+
+### Rate limiting
+
+Monitor your email sending volume:
+
+- Most transactional services have generous free tiers
+- Watch for unusual spikes that might indicate abuse
+- Configure rate limiting in Zulip if needed
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/self-hosting/authentication">
+    Set up user authentication methods
+  </Card>
+  <Card title="Settings" icon="gear" href="/self-hosting/settings">
+    Configure additional server settings
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/self-hosting/troubleshooting">
+    Debug common issues
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/self-hosting/monitoring">
+    Monitor your email sending
+  </Card>
+</CardGroup>

@@ -1,0 +1,318 @@
+---
+title: Using the Development Environment
+description: Learn how to work efficiently with the Zulip development server
+---
+
+This page describes the basic edit/refresh workflows for working with the Zulip development environment. Generally, the development environment will automatically update as soon as you save changes using your editor.
+
+## Common Workflows
+
+### Keep Your Branch Up to Date
+
+Zulip's `main` branch moves quickly. Rebase constantly to avoid developing on an old version:
+
+```bash
+git fetch upstream
+git rebase upstream/main
+```
+
+### Run Provision After Switching Branches
+
+After switching branches or pulling updates, run:
+
+```bash
+./tools/provision
+```
+
+It will run in under a second if no changes are required.
+
+### Run Linters and Tests
+
+After making changes, run the [linters](/development/testing/linters) and relevant [test suites](/development/testing/overview).
+
+Consider using our Git pre-commit hook to automatically lint on commit:
+
+```bash
+./tools/setup-git-repo
+```
+
+### Test Individual Files or Cases
+
+All test suites support testing just a single file or test case:
+
+```bash
+# Lint a single file
+./tools/lint zerver/models/__init__.py
+
+# Run a specific backend test
+./tools/test-backend zerver.tests.test_markdown.MarkdownEmbedsTest.test_inline_youtube
+
+# Run a test class
+./tools/test-backend MarkdownEmbedsTest
+
+# Run a specific frontend test
+./tools/test-js-with-node util
+```
+
+### Development Tools
+
+Many useful development tools are documented in-app at:
+
+**http://localhost:9991/devtools**
+
+This includes tools for:
+
+- Rebuilding the database with different test data
+- Testing various UI states
+- Debugging tools
+- And more
+
+### Reset the Database
+
+To restore your development database to a pristine state:
+
+```bash
+./tools/rebuild-dev-database
+```
+
+## Server Development
+
+### Automatic Restart
+
+For changes that don't affect the database model, the development environment automatically detects changes and restarts:
+
+**Django/Tornado servers**
+
+The main server processes run on Django's `manage.py runserver`, which automatically restarts when you save changes to Python code. Watch the `run-dev` console to see the backend reload.
+
+**Python queue workers**
+
+Queue workers also automatically restart when you save changes, as long as they haven't crashed (which can happen with syntax errors).
+
+### Database Schema Changes
+
+If you change the database schema in `zerver/models/*.py`, you'll need to create a migration:
+
+```bash
+./manage.py makemigrations
+./manage.py migrate
+```
+
+See the [schema migrations guide](/development/schema-migrations) for details. The [new feature tutorial](/development/tutorials/new-feature) also has an example.
+
+### Watch the Console
+
+While testing server changes, watch the `run-dev` console output, which shows:
+
+- Tracebacks for any 500 errors
+- All HTTP requests
+- Database queries (when enabled)
+- Log messages
+
+See [Logging](/development/logging) for more details on console output.
+
+### Query the Database
+
+To manually query Zulip's database:
+
+```bash
+# Interactive Python shell with Django models
+./manage.py shell
+
+# Direct database shell
+./manage.py dbshell
+```
+
+<Note>
+The databases used for automated tests are independent from the one you use for manual testing in the UI. Changes you make manually won't affect automated tests.
+</Note>
+
+## Web Frontend Development
+
+### Access the Server
+
+Once the development server (`run-dev`) is running, visit:
+
+**http://localhost:9991/**
+
+### Login Without Passwords
+
+By default, the development server homepage shows a list of users. Click any user to log in as them instantly.
+
+This saves time when testing. To test the actual login or registration process, click the links for the normal login page.
+
+### Automatic Updates
+
+Most changes take effect automatically:
+
+**CSS files**
+
+Changes appear immediately via webpack hot module replacement. No page reload needed.
+
+**JavaScript code** (`web/src`) and **Handlebars templates** (`web/templates`)
+
+The browser window reloads automatically when you save changes.
+
+**Jinja2 backend templates** (`templates/*`)
+
+You need to manually reload the browser window to see changes.
+
+### JavaScript Exceptions
+
+JavaScript exceptions in development are displayed as a large notice, so you don't need to watch the JavaScript console constantly.
+
+### Browser Developer Tools
+
+Both Chrome and Firefox have excellent built-in developer tools:
+
+- **Debuggers** - Set breakpoints and step through code
+- **Inspectors** - Examine and modify the DOM
+- **Profilers** - Identify performance bottlenecks
+- **Network tools** - Analyze HTTP requests and responses
+
+### JavaScript Profiling
+
+`debug.js` contains occasionally useful JavaScript profiling code for debugging performance issues.
+
+## Mobile Development
+
+For mobile app development, see the [Zulip Flutter documentation](https://github.com/zulip/zulip-flutter/blob/main/docs/setup.md).
+
+## Understanding run-dev Output
+
+The `./tools/run-dev` terminal shows:
+
+### Request Logs
+
+```
+2024-03-05 10:15:23.456 INFO [django.server] "GET /json/messages HTTP/1.1" 200 1234
+```
+
+- Timestamp
+- Log level
+- Logger name
+- HTTP method and path
+- Status code
+- Response size
+
+### Error Tracebacks
+
+When the backend encounters an error, you'll see a full Python traceback:
+
+```
+ERROR 2024-03-05 10:15:23.456 [django.request] Internal Server Error: /api/v1/messages
+Traceback (most recent call last):
+  File "/srv/zulip/zerver/views/messages.py", line 42, in send_message
+    # Traceback details...
+ValueError: Invalid message content
+```
+
+These tracebacks are usually caused by bugs in your code and help you debug issues quickly.
+
+### Service Status
+
+When you start `run-dev`, you'll see status for each service:
+
+```
+Starting Zulip services:
+  Django server (port 9991)
+  Tornado server (port 9993)
+  webpack
+  Queue workers (4 workers)
+```
+
+## Working with Multiple Browser Windows
+
+Zulip's event system syncs changes across all open browser tabs/windows. When testing:
+
+1. Open multiple browser windows with different users
+2. Make a change in one window (e.g., send a message)
+3. See the change appear in real-time in other windows
+
+This is great for testing the real-time sync system.
+
+## Performance Tips
+
+### Use Specific Test Commands
+
+Instead of running the full test suite, run specific tests:
+
+```bash
+# Fast - runs in seconds
+./tools/test-backend zerver.tests.test_messages
+
+# Slow - runs all backend tests
+./tools/test-backend
+```
+
+### Use Git Efficiently
+
+```bash
+# Stash changes while switching branches
+git stash
+git checkout other-branch
+git stash pop
+
+# Rebase instead of merge
+git rebase upstream/main
+
+# Fixup commits during development
+git commit --fixup=<commit-hash>
+git rebase -i --autosquash upstream/main
+```
+
+### Keep Dependencies Updated
+
+Run `./tools/provision` after every rebase or pull. It's fast when nothing changed, but critical when dependencies update.
+
+## Common Tasks
+
+### Add a New Python Dependency
+
+1. Add it to `requirements/common.in` (or another requirements file)
+2. Run `./tools/update-locked-requirements`
+3. Run `./tools/provision`
+
+### Add a New JavaScript Dependency
+
+1. Add it to `package.json`
+2. Run `pnpm install`
+
+### Create Test Users
+
+Use the `/devtools` page in your browser, or:
+
+```bash
+./manage.py create_user user@example.com --realm=zulip
+```
+
+### Populate with Test Data
+
+Create a realm with test data:
+
+```bash
+./manage.py populate_db
+```
+
+### Clear the Cache
+
+```bash
+./scripts/restart-memcached
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="New Feature Tutorial" icon="wand-magic-sparkles" href="/development/tutorials/new-feature">
+    Walk through adding a complete feature
+  </Card>
+  <Card title="Testing Overview" icon="flask" href="/development/testing/overview">
+    Learn how to run and write tests
+  </Card>
+  <Card title="Architecture Overview" icon="sitemap" href="/development/architecture/overview">
+    Understand Zulip's architecture
+  </Card>
+  <Card title="Git Guide" icon="code-branch" href="/development/git-guide">
+    Master Zulip's Git workflows
+  </Card>
+</CardGroup>

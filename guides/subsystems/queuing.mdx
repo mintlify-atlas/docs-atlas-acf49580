@@ -1,0 +1,495 @@
+---
+title: Queue Processors
+description: Understand Zulip's RabbitMQ-based queuing system for asynchronous task processing
+---
+
+Zulip uses RabbitMQ to manage a system of internal queues for asynchronous processing. This is a critical component of Zulip's architecture, handling everything from sending emails to delivering real-time events to clients.
+
+## Why Queuing?
+
+The queuing system enables Zulip to:
+
+1. **Asynchronously handle expensive operations** like sending email notifications that can take seconds per email
+2. **Process non-time-critical operations** like updating analytics tables without blocking user requests
+3. **Communicate events** from Django to the Tornado-based events system
+4. **Deliver push notifications** to mobile devices
+5. **Process errors and diagnostics** in batches for efficiency
+
+## Architecture Overview
+
+Zulip's queuing system consists of:
+
+- **RabbitMQ**: Message broker that manages queues
+- **Pika**: Python library for interfacing with RabbitMQ
+- **Queue Processors**: Worker processes that consume messages from queues
+- **Queue Client**: Custom integration in `zerver/lib/queue.py`
+
+```
+┌─────────────┐
+│   Django    │
+│ Application │
+└──────┬──────┘
+       │ queue_event_on_commit()
+       ▼
+┌─────────────┐
+│  RabbitMQ   │
+│   Queues    │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Queue     │
+│ Processors  │
+└─────────────┘
+```
+
+## Common Queue Use Cases
+
+### Email Notifications
+
+When 100s of users need to be notified about a realm event:
+
+```python
+queue_event_on_commit(
+    "missedmessage_emails",
+    {
+        "user_profile_id": user_profile_id,
+        "message_id": message_id,
+        # ... other data
+    }
+)
+```
+
+The email queue processor batches and sends these asynchronously.
+
+### Mobile Push Notifications
+
+Push notifications are queued to avoid blocking message delivery:
+
+```python
+queue_event_on_commit(
+    "missedmessage_mobile_notifications",
+    {
+        "user_profile_id": user_profile_id,
+        "message_id": message_id,
+        "trigger": trigger_type,
+    }
+)
+```
+
+### Event System
+
+Communicating events from Django to Tornado:
+
+```python
+queue_event_on_commit(
+    "user_activity",
+    {
+        "user_profile_id": user_profile_id,
+        "query": query,
+        "time": time,
+    }
+)
+```
+
+### Analytics Processing
+
+Updating analytics tables in the background:
+
+```python
+queue_event_on_commit(
+    "user_activity_interval",
+    {
+        "user_profile_id": user_profile_id,
+        "start": start_time,
+        "end": end_time,
+    }
+)
+```
+
+## Creating a Queue Processor
+
+### Step 1: Define the Processor
+
+Create a new processor in `zerver/worker/` using the `@assign_queue` decorator:
+
+```python
+# zerver/worker/my_processor.py
+from typing import Any
+from zerver.worker.base import QueueProcessingWorker, assign_queue
+
+@assign_queue('my_queue')
+class MyQueueWorker(QueueProcessingWorker):
+    def consume(self, event: dict[str, Any]) -> None:
+        # Process the event
+        user_id = event['user_profile_id']
+        data = event['data']
+        
+        # Do the actual work
+        process_data(user_id, data)
+```
+
+### Step 2: Add to Supervisord Configuration
+
+Edit `puppet/zulip/manifests/app_frontend_base.pp`:
+
+```puppet
+$queues = [
+  'missedmessage_emails',
+  'missedmessage_mobile_notifications',
+  'user_activity',
+  'my_queue',  # Add your queue
+  # ... other queues
+]
+```
+
+This generates the supervisord configuration at `/etc/supervisor/conf.d/zulip.conf`.
+
+### Step 3: Test Locally
+
+In development, `tools/run-dev` automatically runs all queue processors:
+
+```bash
+# Run all processors
+tools/run-dev
+
+# Or run a single processor manually
+./manage.py process_queue --queue=my_queue
+```
+
+### Step 4: Update Nagios Monitoring
+
+Your queue is automatically added to `scripts/nagios/check-rabbitmq-consumers`. Update the sample Nagios configuration in `puppet/kandra` manually.
+
+## Publishing Events to Queues
+
+Use `queue_event_on_commit()` from `zerver/lib/queue.py`:
+
+```python
+from zerver.lib.queue import queue_event_on_commit
+
+def my_action(user_profile: UserProfile, data: dict) -> None:
+    # Synchronous work here
+    process_immediate_stuff()
+    
+    # Queue asynchronous work
+    queue_event_on_commit(
+        "my_queue",
+        {
+            "user_profile_id": user_profile.id,
+            "data": data,
+            "timestamp": timezone_now().timestamp(),
+        }
+    )
+```
+
+<Info>
+`queue_event_on_commit()` uses Django's transaction hooks to ensure events are only queued after the database transaction commits successfully.
+</Info>
+
+## Queue Processors in Tests
+
+In backend tests, `queue_event_on_commit()` directly calls the queue processor's `consume()` method rather than using RabbitMQ:
+
+```python
+# In production:
+queue_event_on_commit("my_queue", event)  # → RabbitMQ → Worker
+
+# In tests:
+queue_event_on_commit("my_queue", event)  # → consume() directly
+```
+
+This makes tests:
+- **Faster**: No RabbitMQ overhead
+- **More predictable**: Synchronous execution
+- **Better coverage**: Queue processor code is automatically tested
+
+You can also pass a custom test function:
+
+```python
+def my_test_handler(event: dict) -> None:
+    # Custom test logic
+    assert event['data'] == expected_data
+
+queue_event_on_commit(
+    "my_queue",
+    event_data,
+    test_handler=my_test_handler
+)
+```
+
+## Common Queue Processors
+
+Zulip includes these built-in queue processors:
+
+### missedmessage_emails
+
+**Purpose:** Send email notifications for missed messages
+
+**Location:** `zerver/worker/missedmessage_emails.py`
+
+**Features:**
+- Batches multiple messages into a single email
+- Waits 2 minutes before sending to allow batching
+- Checks if messages were read before sending
+
+### missedmessage_mobile_notifications
+
+**Purpose:** Send mobile push notifications
+
+**Location:** `zerver/worker/missedmessage_mobile_notifications.py`
+
+**Features:**
+- Sends notifications to iOS and Android devices
+- Updates badge counts
+- Handles device token invalidation
+
+### user_activity
+
+**Purpose:** Track user activity for analytics
+
+**Location:** `zerver/worker/user_activity.py`
+
+**Features:**
+- Records client activity
+- Updates UserActivity table
+- Powers presence system
+
+### email_senders
+
+**Purpose:** Send various email types (confirmations, invitations, etc.)
+
+**Location:** `zerver/worker/email_senders.py`
+
+**Features:**
+- Handles all outgoing emails
+- Supports email throttling
+- Manages email templates
+
+### embed_links
+
+**Purpose:** Generate link previews for URLs in messages
+
+**Location:** `zerver/worker/embed_links.py`
+
+**Features:**
+- Fetches URL metadata
+- Generates OpenGraph previews
+- Updates messages with preview data
+
+### thumbnail
+
+**Purpose:** Generate image thumbnails
+
+**Location:** `zerver/worker/thumbnail.py`
+
+**Features:**
+- Creates multiple thumbnail sizes
+- Supports various image formats
+- Updates messages when complete
+
+## Managing Queues
+
+### Clear a Queue
+
+Delete all events in a queue:
+
+```bash
+# Using Django management command
+./manage.py purge_queue my_queue
+
+# Using amqp-tools directly
+amqp-delete-queue \
+  --username=zulip \
+  --password='<password from /etc/zulip/zulip-secrets.conf>' \
+  --server=localhost \
+  --queue=my_queue
+```
+
+### Monitor Queue Length
+
+```bash
+# List all queues and message counts
+sudo rabbitmqctl list_queues
+
+# Monitor specific queue
+watch -n 1 'sudo rabbitmqctl list_queues name messages | grep my_queue'
+```
+
+### View Queue Messages
+
+```bash
+# Peek at messages without consuming
+rabbitmqadmin get queue=my_queue count=5
+```
+
+## Queue Processing Patterns
+
+### Idempotent Processing
+
+Queue processors should be idempotent - processing the same event multiple times should be safe:
+
+```python
+@assign_queue('my_queue')
+class MyWorker(QueueProcessingWorker):
+    def consume(self, event: dict[str, Any]) -> None:
+        # Check if already processed
+        if already_processed(event['id']):
+            return
+        
+        # Process
+        do_work(event)
+        
+        # Mark as processed
+        mark_processed(event['id'])
+```
+
+### Error Handling
+
+Handle errors gracefully to avoid losing events:
+
+```python
+@assign_queue('my_queue')
+class MyWorker(QueueProcessingWorker):
+    def consume(self, event: dict[str, Any]) -> None:
+        try:
+            do_work(event)
+        except RetryableError:
+            # Re-queue for retry
+            self.retry_event(event)
+        except PermanentError as e:
+            # Log and skip
+            logger.error(f"Permanent error: {e}")
+            # Don't re-raise - acknowledge the message
+```
+
+### Batching
+
+Process multiple events together for efficiency:
+
+```python
+@assign_queue('my_queue')
+class MyBatchWorker(QueueProcessingWorker):
+    def __init__(self) -> None:
+        super().__init__()
+        self.batch: list[dict] = []
+        self.batch_size = 100
+    
+    def consume(self, event: dict[str, Any]) -> None:
+        self.batch.append(event)
+        
+        if len(self.batch) >= self.batch_size:
+            self.process_batch()
+    
+    def process_batch(self) -> None:
+        # Process all events together
+        batch_process(self.batch)
+        self.batch = []
+```
+
+## Performance Considerations
+
+### Queue Processor Scaling
+
+Run multiple instances of a queue processor for higher throughput:
+
+```bash
+# In production, configure multiple workers in supervisord
+[program:zulip_processor_my_queue]
+command=/home/zulip/deployments/current/manage.py process_queue --queue=my_queue
+process_name=%(program_name)s-%(process_num)s
+numprocs=4  # Run 4 instances
+```
+
+### Message Prefetch
+
+Control how many messages a worker fetches at once:
+
+```python
+class MyWorker(QueueProcessingWorker):
+    # Fetch up to 10 messages at a time
+    def __init__(self) -> None:
+        super().__init__(prefetch=10)
+```
+
+Lower prefetch for:
+- Long-running operations
+- Load balancing across workers
+
+Higher prefetch for:
+- Quick operations
+- Better throughput
+
+## RabbitMQ Configuration
+
+Zulip's RabbitMQ connection settings in `zerver/lib/queue.py`:
+
+```python
+# Connection parameters
+settings.RABBITMQ_HOST        # Default: 'localhost'
+settings.RABBITMQ_PORT        # Default: 5672
+settings.RABBITMQ_USERNAME    # Default: 'zulip'
+settings.RABBITMQ_PASSWORD    # From zulip-secrets.conf
+settings.RABBITMQ_VHOST       # Default: '/'
+settings.RABBITMQ_USE_TLS     # Default: False
+```
+
+### TCP Keepalive
+
+Zulip configures TCP keepalive to prevent connection drops:
+
+```python
+tcp_options = dict(TCP_KEEPIDLE=60 * 5)  # 5 minutes
+```
+
+This prevents Kubernetes/Docker networks from killing "idle" connections.
+
+## Debugging
+
+### Enable Debug Logging
+
+```python
+import logging
+logging.getLogger('zulip.queue').setLevel(logging.DEBUG)
+```
+
+### Common Issues
+
+**Queue processor not starting:**
+```bash
+# Check supervisord status
+supervisorctl status
+
+# View processor logs
+tail -f /var/log/zulip/queue_processors.log
+```
+
+**Messages not being processed:**
+```bash
+# Check RabbitMQ status
+sudo rabbitmqctl status
+
+# Check queue length
+sudo rabbitmqctl list_queues
+```
+
+**Events being lost:**
+- Check that `queue_event_on_commit()` is called within a transaction
+- Verify the queue processor is running
+- Check for exceptions in processor logs
+
+## Best Practices
+
+1. **Use transactions**: Only queue events within database transactions
+2. **Be idempotent**: Handle duplicate processing gracefully
+3. **Log liberally**: Queue processors run in the background - good logging is essential
+4. **Handle errors**: Don't let exceptions crash the worker
+5. **Monitor queue length**: Long queues indicate processing problems
+6. **Test thoroughly**: Write tests that exercise queue processors
+7. **Keep it simple**: Complex logic belongs in library code, not queue processors
+
+## Related Resources
+
+- [Sending Messages](https://zulip.readthedocs.io/en/latest/subsystems/sending-messages.html)
+- [Notifications System](/guides/subsystems/notifications)
+- [Events System](https://zulip.readthedocs.io/en/latest/subsystems/events-system.html)

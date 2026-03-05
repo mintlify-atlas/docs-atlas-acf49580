@@ -1,0 +1,431 @@
+---
+title: Features
+description: Explore Zulip's powerful features for organized team communication
+---
+
+Zulip is packed with features designed to make team communication productive, organized, and delightful. Here's an overview of what makes Zulip stand out.
+
+## Core Features
+
+<CardGroup cols={2}>
+  <Card title="Topic-based Threading" icon="comments" href="/why-zulip/topic-based-threading">
+    Organize conversations by topic within channels for effortless context switching and async collaboration
+  </Card>
+  
+  <Card title="Powerful Search" icon="magnifying-glass">
+    Find any message instantly with advanced search operators and full-text search
+  </Card>
+  
+  <Card title="Rich Formatting" icon="markdown" href="/guides/message-formatting">
+    Markdown, LaTeX math, syntax-highlighted code blocks, and more
+  </Card>
+  
+  <Card title="Real-time Sync" icon="arrows-rotate">
+    Seamless synchronization across web, desktop, mobile, and terminal clients
+  </Card>
+</CardGroup>
+
+## Message Organization
+
+### Channels and Topics
+
+Every message in Zulip belongs to a **channel** (like #general or #engineering) and has a **topic** (like "Bug #1234" or "Q1 Planning"). This dual-layer organization means:
+
+- Multiple conversations can happen simultaneously in the same channel
+- You can catch up on specific topics without reading everything
+- Conversations can span hours or days without getting lost
+- Search and reference past discussions easily
+
+<Tip>
+  **Topic-based threading** is Zulip's superpower. It combines the organization of email with the immediacy of chat.
+</Tip>
+
+### Smart Inbox
+
+The inbox view shows all your unread messages organized by channel and topic:
+
+- See at a glance which conversations need your attention
+- Mark entire topics as read with one click
+- Filter by direct messages, mentions, or channels
+- Zero inbox pressure - come back to conversations when convenient
+
+### Combined Feed
+
+View all messages from unmuted channels and topics in one continuous feed, or narrow to specific channels, topics, or search queries.
+
+## Communication Features
+
+### Message Formatting
+
+Zulip supports rich message formatting to make your communication clear and expressive:
+
+<AccordionGroup>
+  <Accordion title="Markdown Syntax">
+    Full GitHub Flavored Markdown (GFM) support including:
+    
+    - **Bold**, *italic*, ~~strikethrough~~, and `inline code`
+    - Bulleted and numbered lists
+    - Block quotes and nested formatting
+    - Links with automatic previews
+    - Tables for structured data
+  </Accordion>
+  
+  <Accordion title="Code Blocks">
+    Syntax-highlighted code blocks with language detection:
+    
+    ```python
+    def send_message(content: str, topic: str) -> None:
+        """Send a message to a Zulip topic."""
+        client.send_message({
+            "type": "stream",
+            "to": "general",
+            "topic": topic,
+            "content": content,
+        })
+    ```
+    
+    Supports 100+ programming languages with automatic syntax highlighting.
+  </Accordion>
+  
+  <Accordion title="LaTeX Math">
+    Render mathematical expressions inline or in display mode:
+    
+    - Inline: $E = mc^2$
+    - Display mode for complex equations
+    - Perfect for scientific and academic teams
+  </Accordion>
+  
+  <Accordion title="Interactive Elements">
+    - **Emoji reactions**: React to messages with emoji
+    - **Polls**: Create polls with multiple options
+    - **Todo lists**: Collaborative checkboxes
+    - **Spoilers**: Hide content behind a reveal button
+    - **Link previews**: Automatic unfurling of links and images
+  </Accordion>
+</AccordionGroup>
+
+### Direct Messages
+
+- One-on-one conversations
+- Group direct messages with up to 8 participants
+- Same topic-based organization as channel messages
+- Encrypted storage (end-to-end encryption coming soon)
+
+### Mentions and Notifications
+
+<Steps>
+  <Step title="Personal mentions">
+    Use `@username` to notify specific users. They'll see a highlight and get a notification based on their settings.
+  </Step>
+  
+  <Step title="Group mentions">
+    Notify everyone in a channel with `@**all**` or specific user groups with `@**group-name**`.
+  </Step>
+  
+  <Step title="Topic follows">
+    Follow specific topics to get notifications for all messages, even without being mentioned.
+  </Step>
+  
+  <Step title="Wildcard mentions">
+    Use `@**channel**` to notify all subscribers to a channel (requires permissions).
+  </Step>
+</Steps>
+
+<Warning>
+  Use wildcard mentions sparingly - they notify everyone subscribed to the channel.
+</Warning>
+
+## Search and Navigation
+
+### Advanced Search
+
+Zulip's search is designed for power users:
+
+```
+stream:general topic:"feature requests" is:starred
+```
+
+Search operators include:
+- `stream:name` - Search within a specific channel
+- `topic:name` - Search within a topic
+- `sender:user` - Messages from a specific user
+- `is:starred`, `is:mentioned`, `is:private` - Filter by message type
+- `has:link`, `has:image`, `has:attachment` - Filter by content
+- `near:12345` - Show context around message ID
+
+### Narrowing
+
+Narrowing focuses your view on specific conversations:
+
+- Click a channel to see all messages in that channel
+- Click a topic to see just that conversation
+- Use keyboard shortcuts to narrow efficiently
+- Share narrow URLs to link teammates to specific conversations
+
+<Info>
+  Narrow URLs preserve the exact context, making it easy to reference past discussions.
+</Info>
+
+### Keyboard Shortcuts
+
+Power through your workflow with keyboard shortcuts:
+
+- `C` - Compose a new channel message
+- `X` - Start a new topic
+- `R` - Reply to the selected message
+- `S` - Narrow to a topic
+- `/` - Search messages
+- `N` / `P` - Next/previous unread message
+- `?` - Show all keyboard shortcuts
+
+## Integrations
+
+### Native Integrations
+
+Zulip includes 100+ native integrations out of the box:
+
+<CardGroup cols={3}>
+  <Card title="Development" icon="code">
+    GitHub, GitLab, Bitbucket, Jira, Sentry, Travis CI, CircleCI, Jenkins
+  </Card>
+  
+  <Card title="Productivity" icon="briefcase">
+    Trello, Asana, Zendesk, Intercom, Google Calendar, Dropbox
+  </Card>
+  
+  <Card title="Monitoring" icon="chart-line">
+    Nagios, New Relic, Datadog, PagerDuty, Grafana, Prometheus
+  </Card>
+</CardGroup>
+
+### Webhooks
+
+Create custom integrations easily:
+
+```bash
+curl -X POST https://your-domain.zulipchat.com/api/v1/messages \
+  -u BOT_EMAIL:API_KEY \
+  -d "type=stream" \
+  -d "to=engineering" \
+  -d "topic=Deployments" \
+  -d "content=Deploy completed successfully ✅"
+```
+
+### Bots and API
+
+- **Interactive bots**: Respond to messages and commands
+- **Outgoing webhooks**: Trigger external services from Zulip
+- **REST API**: Full-featured API for custom integrations
+- **Python, JavaScript, PHP libraries**: Official client libraries
+- **Real-time events**: WebSocket/long-polling event stream
+
+## Collaboration Features
+
+### Message Actions
+
+<CardGroup cols={2}>
+  <Card title="Edit Messages" icon="pen">
+    Edit your messages after sending (with edit history)
+  </Card>
+  
+  <Card title="Move Messages" icon="arrows-up-down">
+    Move messages between topics or channels to keep conversations organized
+  </Card>
+  
+  <Card title="Quote and Reply" icon="quote-left">
+    Quote previous messages when replying for clarity
+  </Card>
+  
+  <Card title="Star Messages" icon="star">
+    Bookmark important messages to find them later
+  </Card>
+</CardGroup>
+
+### File Sharing
+
+- Drag and drop files directly into the compose box
+- Image previews inline in the message feed
+- Support for all file types
+- Configurable storage backends (local or S3-compatible)
+
+### Video Calls
+
+Start video calls directly from Zulip:
+
+- Native Jitsi Meet integration
+- Zoom integration
+- BigBlueButton support
+- Custom video call provider support
+
+## Administration
+
+### User Management
+
+- Invite users via email or invitation links
+- Custom user groups for @-mentions and permissions
+- Guest users with restricted access
+- Deactivate and reactivate users
+- SCIM provisioning for automated user management
+
+### Channel Management
+
+<Accordion title="Channel Types">
+  - **Public channels**: Visible to all users, anyone can subscribe
+  - **Private channels**: Invitation-only, hidden from non-members
+  - **Web-public channels**: Readable by anyone on the internet (optional)
+</Accordion>
+
+<Accordion title="Channel Settings">
+  - Posting permissions (who can post, who can create topics)
+  - Message retention policies
+  - Default channels for new users
+  - Channel descriptions and color coding
+</Accordion>
+
+### Permissions and Roles
+
+Granular permissions system with roles:
+
+- **Organization owners**: Full administrative control
+- **Administrators**: Most admin capabilities
+- **Moderators**: Content moderation powers
+- **Members**: Regular users
+- **Guests**: Restricted access to specific channels
+
+Customize permissions for:
+- Who can create channels
+- Who can add custom emoji
+- Who can edit topic names
+- Who can delete messages
+- And 50+ other permissions
+
+## Security and Compliance
+
+### Authentication
+
+<CardGroup cols={2}>
+  <Card title="SSO" icon="shield">
+    SAML, LDAP/Active Directory, and social auth (Google, GitHub, GitLab, Apple)
+  </Card>
+  
+  <Card title="Two-Factor Auth" icon="key">
+    Optional 2FA for all users or enforced organization-wide
+  </Card>
+</CardGroup>
+
+### Data Control
+
+- **Self-hosting**: Complete control over your data
+- **Export tools**: Export all organization data
+- **Message retention**: Configure retention policies per channel
+- **Access controls**: Fine-grained permissions
+- **Audit logs**: Track administrative actions
+
+### Compliance Features
+
+- **GDPR compliance**: Data portability and deletion
+- **SOC 2 Type II** (Zulip Cloud)
+- **HIPAA support** (self-hosted)
+- **Data residency options** (self-hosted)
+
+## Mobile and Desktop Apps
+
+### Cross-Platform Clients
+
+<CardGroup cols={2}>
+  <Card title="Mobile Apps" icon="mobile">
+    Native iOS and Android apps built with Flutter
+    
+    - Push notifications
+    - Offline message reading
+    - Biometric authentication
+    - Share to Zulip from other apps
+  </Card>
+  
+  <Card title="Desktop Apps" icon="desktop">
+    Native apps for macOS, Windows, and Linux
+    
+    - System tray integration
+    - Desktop notifications
+    - Multiple organization support
+    - Auto-updates
+  </Card>
+</CardGroup>
+
+### Terminal Client
+
+Zulip Terminal provides a text-based interface for terminal enthusiasts:
+
+```bash
+pip install zulip-term
+zulip-term
+```
+
+## Customization
+
+### Appearance
+
+- **Themes**: Light, dark, and automatic based on system
+- **Emoji sets**: Twitter, Google, Apple, or text-based
+- **Font size**: Customize for readability
+- **Emoji reactions**: Add custom emoji for your organization
+- **Logo and colors**: Brand your Zulip instance (self-hosted)
+
+### Language Support
+
+Zulip is available in 25+ languages including:
+- English, Spanish, French, German, Portuguese
+- Chinese, Japanese, Korean, Hindi
+- Russian, Polish, Turkish, and more
+
+Contributed by the community via Weblate.
+
+## Performance and Scale
+
+<Info>
+  Zulip is built to scale. The codebase is designed to handle organizations with thousands of users and millions of messages.
+</Info>
+
+### Technical Highlights
+
+- **Efficient backend**: Python/Django for the main app, Tornado for real-time events
+- **Smart caching**: Redis and memcached for optimal performance
+- **Database**: PostgreSQL with full-text search
+- **Message queue**: RabbitMQ for reliable background processing
+- **CDN-ready**: Static assets optimized for CDN delivery
+
+### Self-hosting Options
+
+<CardGroup cols={2}>
+  <Card title="Docker" icon="docker">
+    Official Docker images for easy deployment
+  </Card>
+  
+  <Card title="Native Install" icon="server">
+    Ubuntu and Debian packages with automated installer
+  </Card>
+  
+  <Card title="Cloud Providers" icon="cloud">
+    Pre-built images for Digital Ocean and Render
+  </Card>
+  
+  <Card title="High Availability" icon="diagram-project">
+    Multi-server deployments for enterprise scale
+  </Card>
+</CardGroup>
+
+## Learn More
+
+<CardGroup cols={3}>
+  <Card title="Why Topic-based Threading?" icon="comments" href="/why-zulip/topic-based-threading">
+    Understand what makes Zulip different
+  </Card>
+  
+  <Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+    Get up and running in 5 minutes
+  </Card>
+  
+  <Card title="Compare Chat Apps" icon="balance-scale" href="/why-zulip/comparison">
+    See how Zulip stacks up against alternatives
+  </Card>
+</CardGroup>

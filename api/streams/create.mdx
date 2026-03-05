@@ -1,0 +1,315 @@
+---
+title: 'Subscribe to Channels'
+description: 'POST /api/v1/users/me/subscriptions - Subscribe users to channels'
+---
+
+## Endpoint
+
+```
+POST /api/v1/users/me/subscriptions
+```
+
+Subscribe one or more users to one or more channels. If a specified channel doesn't exist, it's automatically created.
+
+<Info>
+  This endpoint both creates channels AND subscribes users. It's the primary way to create new channels.
+</Info>
+
+## Request Parameters
+
+<ParamField body="subscriptions" type="array" required>
+  Array of channel objects to subscribe to. Each object must contain:
+  
+  - `name` (required) - Channel name
+  - `description` (optional) - Channel description
+  
+  Example:
+  ```json
+  [
+    {"name": "general", "description": "General discussion"},
+    {"name": "engineering"}
+  ]
+  ```
+</ParamField>
+
+<ParamField body="principals" type="array">
+  Array of user IDs or email addresses to subscribe.
+  
+  If not provided, subscribes only the requesting user.
+  
+  Example: `["alice@example.com", "bob@example.com"]` or `[5, 10, 15]`
+</ParamField>
+
+<ParamField body="invite_only" type="boolean" default="false">
+  Whether newly created channels are private.
+</ParamField>
+
+<ParamField body="is_web_public" type="boolean" default="false">
+  Whether newly created channels are web-public.
+  
+  Requires `WEB_PUBLIC_STREAMS_ENABLED` server setting.
+</ParamField>
+
+<ParamField body="is_default_stream" type="boolean" default="false">
+  Whether newly created channels are default channels for new users.
+  
+  **Added in Zulip 8.0 (feature level 230)**
+</ParamField>
+
+<ParamField body="history_public_to_subscribers" type="boolean" default="varies">
+  Whether channel history is public to subscribers.
+  
+  Defaults based on organization settings.
+</ParamField>
+
+<ParamField body="message_retention_days" type="integer | string">
+  How long to retain messages. Can be:
+  - Integer (days)
+  - `"unlimited"`
+  - `"realm_default"`
+  
+  **Added in Zulip 3.0 (feature level 17)**
+</ParamField>
+
+<ParamField body="can_send_message_group" type="integer">
+  User group ID that can send messages to this channel.
+  
+  **Added in Zulip 10.0 (feature level 333)**
+</ParamField>
+
+<ParamField body="announce" type="boolean" default="false">
+  Whether to announce the new channel creation.
+</ParamField>
+
+<ParamField body="authorization_errors_fatal" type="boolean" default="true">
+  Whether authorization errors should be fatal or returned in `unauthorized` array.
+</ParamField>
+
+## Response
+
+<ResponseField name="subscribed" type="object">
+  Map of user emails to channels they were subscribed to.
+</ResponseField>
+
+<ResponseField name="already_subscribed" type="object">
+  Map of user emails to channels they were already subscribed to.
+</ResponseField>
+
+<ResponseField name="unauthorized" type="array">
+  Channels where subscription failed due to authorization errors.
+  
+  Only present when `authorization_errors_fatal=false`.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL - Subscribe Self
+curl -X POST https://your-domain.zulipchat.com/api/v1/users/me/subscriptions \
+  -u email@example.com:API_KEY \
+  --data-urlencode 'subscriptions=[{"name": "engineering", "description": "Engineering team"}]'
+```
+
+```bash cURL - Subscribe Multiple Users
+curl -X POST https://your-domain.zulipchat.com/api/v1/users/me/subscriptions \
+  -u email@example.com:API_KEY \
+  --data-urlencode 'subscriptions=[{"name": "project-alpha"}]' \
+  --data-urlencode 'principals=["alice@example.com", "bob@example.com"]'
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Subscribe yourself to channels
+result = client.add_subscriptions(
+    streams=[
+        {"name": "general", "description": "General discussion"},
+        {"name": "engineering"}
+    ]
+)
+
+print(result)
+
+# Subscribe other users
+result = client.add_subscriptions(
+    streams=[{"name": "project-alpha"}],
+    principals=["alice@example.com", "bob@example.com"]
+)
+
+# Create a private channel
+result = client.add_subscriptions(
+    streams=[
+        {
+            "name": "private-team",
+            "description": "Private team channel"
+        }
+    ],
+    invite_only=True,
+    principals=["alice@example.com", "bob@example.com", "charlie@example.com"]
+)
+
+# Create a web-public channel
+result = client.add_subscriptions(
+    streams=[
+        {
+            "name": "announcements",
+            "description": "Public announcements"
+        }
+    ],
+    is_web_public=True
+)
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Subscribe to channels
+const params = {
+  subscriptions: [
+    {name: 'general', description: 'General discussion'},
+    {name: 'engineering'}
+  ]
+};
+
+const result = await client.users.me.subscriptions.add(params);
+console.log(result);
+
+// Subscribe other users
+const multiUserParams = {
+  subscriptions: [{name: 'project-alpha'}],
+  principals: ['alice@example.com', 'bob@example.com']
+};
+
+const multiResult = await client.users.me.subscriptions.add(multiUserParams);
+```
+
+</CodeGroup>
+
+## Response Examples
+
+<ResponseExample>
+
+```json Success Response
+{
+  "result": "success",
+  "msg": "",
+  "subscribed": {
+    "alice@example.com": ["engineering"],
+    "bob@example.com": ["engineering"]
+  },
+  "already_subscribed": {}
+}
+```
+
+```json Partial Success
+{
+  "result": "success",
+  "msg": "",
+  "subscribed": {
+    "alice@example.com": ["engineering"]
+  },
+  "already_subscribed": {
+    "bob@example.com": ["engineering"]
+  }
+}
+```
+
+```json Error - Invalid Principal
+{
+  "result": "error",
+  "msg": "Invalid email 'invalid@example.com'",
+  "code": "BAD_REQUEST"
+}
+```
+
+</ResponseExample>
+
+## Creating Channels
+
+Channels are automatically created if they don't exist:
+
+```python
+# This creates AND subscribes
+result = client.add_subscriptions(
+    streams=[
+        {
+            "name": "new-project",
+            "description": "Discussion for the new project"
+        }
+    ],
+    invite_only=False,  # Public channel
+    history_public_to_subscribers=True,
+    message_retention_days="unlimited"
+)
+```
+
+## Permissions
+
+<AccordionGroup>
+  <Accordion title="Subscribe Yourself">
+    Users can subscribe themselves to:
+    - Public channels (if in `can_subscribe_group`)
+    - Private channels they've been invited to
+    - Channels where they have appropriate permissions
+  </Accordion>
+  
+  <Accordion title="Subscribe Others">
+    Users can subscribe others if:
+    - They're in the channel's `can_add_subscribers_group`
+    - The channel allows adding subscribers
+    - They have appropriate organization role
+  </Accordion>
+  
+  <Accordion title="Create Channels">
+    Channel creation permissions vary by organization:
+    - Admins can always create channels
+    - Other users based on organization settings
+    - Private channels may have stricter requirements
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Check>
+  **Provide descriptions** when creating channels for better discoverability.
+</Check>
+
+<Check>
+  **Use meaningful names** that clearly indicate the channel's purpose.
+</Check>
+
+<Check>
+  **Set appropriate privacy** levels based on content sensitivity.
+</Check>
+
+<Warning>
+  Creating many channels programmatically may require administrator approval in some organizations.
+</Warning>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Channels" icon="list" href="/api/streams/list">
+    Get all accessible channels
+  </Card>
+  <Card title="Update Channel" icon="pen" href="/api/streams/update">
+    Modify channel settings
+  </Card>
+  <Card title="Unsubscribe" icon="user-minus" href="/api/streams/subscribe">
+    Remove subscriptions
+  </Card>
+  <Card title="Get Topics" icon="list" href="/api/streams/topics">
+    List topics in a channel
+  </Card>
+</CardGroup>

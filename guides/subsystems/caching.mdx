@@ -1,0 +1,456 @@
+---
+title: Caching System
+description: Learn how Zulip uses memcached and other caching strategies for optimal performance
+---
+
+Zulip makes extensive use of caching to deliver excellent performance. This guide explains how Zulip's caching system works, focusing on memcached for backend caching and browser-side caching strategies.
+
+## Backend Caching with Memcached
+
+Zulip uses memcached, a popular key-value store, to optimize performance and scalability. Memcached caching helps avoid database query overhead - a typical Django query can take 3-10x longer than a memcached fetch.
+
+### The Philosophy
+
+Zulip's caching system is designed so that developers can write straightforward code that:
+
+1. **Automatically benefits from caching** without explicit cache calls
+2. **Never has cache consistency bugs** through automatic invalidation
+3. **Stays up-to-date** without manual cache management
+
+Developers typically just call standard accessor functions like `get_user()` or `access_stream_by_id()`, and everything works correctly with transparent caching.
+
+## The Core Implementation
+
+### cache_with_key Decorator
+
+The `cache_with_key` decorator is the foundation of Zulip's caching system:
+
+```python
+from zerver.lib.cache import cache_with_key
+import hashlib
+
+def user_profile_by_email_realm_id_cache_key(email: str, realm_id: int) -> str:
+    return f"user_profile:{hashlib.sha1(email.strip().encode()).hexdigest()}:{realm_id}"
+
+@cache_with_key(user_profile_by_email_realm_id_cache_key, timeout=3600 * 24 * 7)
+def get_user(email: str, realm: Realm) -> UserProfile:
+    return UserProfile.objects.get(email__iexact=email.strip(), realm=realm)
+```
+
+### How It Works
+
+1. **Cache Key Generation**: The key function creates a unique string from canonical arguments
+2. **Cache Lookup**: On function call, check memcached for the key
+3. **Cache Hit**: Return cached value immediately
+4. **Cache Miss**: Execute function body, store result in cache, return value
+5. **Expiration**: Entries expire after timeout (7 days in example above)
+
+```
+┌──────────────┐
+│ get_user()   │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐     Hit    ┌──────────────┐
+│ Check Cache  │────────────>│ Return Value │
+└──────┬───────┘             └──────────────┘
+       │ Miss
+       ▼
+┌──────────────┐
+│ Query DB     │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Store Cache  │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Return Value │
+└──────────────┘
+```
+
+### Cache Key Design
+
+Good cache keys:
+
+1. **Are namespaced**: `user_profile:` prefix prevents overlaps
+2. **Encode all arguments**: Hash email and realm_id
+3. **Are unique**: Different arguments = different keys
+4. **Are safe**: Use `hashlib.sha1()` for special characters
+
+```python
+# Good: Unique keys for different lookups
+user_profile_by_email_realm_id_cache_key("alice@example.com", 1)
+# → "user_profile:abc123...:1"
+
+user_profile_by_email_realm_id_cache_key("bob@example.com", 1)
+# → "user_profile:def456...:1"
+```
+
+## Cache Invalidation
+
+The hard part of caching is ensuring cached data stays fresh. Zulip uses Django's `post_save` signals for automatic cache invalidation.
+
+### How It Works
+
+```python
+# In zerver/models/users.py
+from django.db.models.signals import post_save
+
+post_save.connect(flush_user_profile, sender=UserProfile)
+```
+
+Whenever `user_profile.save()` is called, Django automatically calls `flush_user_profile()`:
+
+```python
+def flush_user_profile(sender: type[UserProfile], **kwargs: Any) -> None:
+    user_profile = kwargs['instance']
+    
+    # Compute all cache keys that might contain stale data
+    keys_to_flush = [
+        user_profile_by_email_realm_id_cache_key(user_profile.email, user_profile.realm_id),
+        user_profile_by_id_cache_key(user_profile.id),
+        # ... other related keys
+    ]
+    
+    # Remove them from cache
+    cache_delete_many(keys_to_flush)
+```
+
+### Invalidation Rules
+
+A cache key must be flushed if the saved data appears **in any form** in that cache:
+
+**Example:** The `active_user_ids_cache_key` must be flushed when:
+- A new user is created (new ID in list)
+- A user is activated/deactivated (`is_active` changes)
+- Even though the cache only stores IDs, changes to the `is_active` flag affect which IDs are in the list
+
+### Safe Patterns
+
+Developers writing Zulip code just need to:
+
+1. Call `.save()` on modified objects
+2. Pass `update_fields` to `.save()` to indicate what changed
+3. Trust the flush functions to handle cache invalidation
+
+```python
+# Safe and automatic cache invalidation
+user_profile.full_name = "New Name"
+user_profile.save(update_fields=['full_name'])
+# flush_user_profile() automatically called
+```
+
+## Cautions and Anti-Patterns
+
+### Don't Reuse Cache Keys for Different Data
+
+<Warning>
+**Bad Example:**
+
+```python
+# DON'T DO THIS
+@cache_with_key(user_profile_by_email_cache_key)
+def get_user(email: str, realm: Realm) -> UserProfile:
+    return UserProfile.objects.get(email=email, realm=realm)
+
+@cache_with_key(user_profile_by_email_cache_key)  # Same key function!
+def get_active_user(email: str, realm: Realm) -> UserProfile:
+    return UserProfile.objects.get(email=email, realm=realm, is_active=True)
+```
+
+Problem: If `get_user()` caches a deactivated user, `get_active_user()` will incorrectly return that cached user without checking `is_active`.
+</Warning>
+
+<Tip>
+**Correct Pattern:**
+
+```python
+# Use separate cache key functions for different queries
+@cache_with_key(user_profile_by_email_cache_key)
+def get_user(email: str, realm: Realm) -> UserProfile:
+    return UserProfile.objects.get(email=email, realm=realm)
+
+@cache_with_key(active_user_profile_by_email_cache_key)  # Different key!
+def get_active_user(email: str, realm: Realm) -> UserProfile:
+    return UserProfile.objects.get(email=email, realm=realm, is_active=True)
+```
+</Tip>
+
+## Production Deployments
+
+### Cache Key Prefixes
+
+Each deployment directory has a unique `KEY_PREFIX` in `var/remote_cache_prefix`. This prefix is automatically prepended to all cache keys:
+
+```python
+# Actual cache key in memcached
+"abc123-user_profile:def456:1"
+#  ^      ^
+#  |      └─ Your cache key
+#  └─ KEY_PREFIX from deployment
+```
+
+This prevents cache contamination between deployments:
+
+```
+/home/zulip/deployments/2024-03-01/ → KEY_PREFIX: abc123
+/home/zulip/deployments/2024-03-05/ → KEY_PREFIX: xyz789
+```
+
+When upgrading, the new deployment uses a new prefix, so old cached data is automatically ignored.
+
+## Automated Testing
+
+### Test Isolation
+
+Each test gets a unique `KEY_PREFIX`, ensuring complete isolation:
+
+```python
+# Test 1: KEY_PREFIX = "test_abc123"
+# Test 2: KEY_PREFIX = "test_def456"
+# Test 3: KEY_PREFIX = "test_xyz789"
+```
+
+Benefits:
+
+1. **No cross-contamination**: Tests never interfere with each other
+2. **Reliable assertions**: Query count checks are consistent
+3. **Easy debugging**: No need to consider cache state from other tests
+4. **Fast**: No need to flush memcached between tests
+
+### Testing Query Counts
+
+```python
+with self.assert_database_query_count(3):
+    # First call - cache miss, queries DB
+    user = get_user(email, realm)
+
+with self.assert_database_query_count(0):
+    # Second call - cache hit, no DB queries
+    user = get_user(email, realm)
+```
+
+## Manual Testing
+
+Zulip's development environment automatically flushes memcached when:
+
+- Running `tools/provision`
+- Starting `tools/run-dev`
+
+To disable auto-flush:
+
+```bash
+tools/run-dev --no-clear-memcached
+```
+
+## Performance Optimization
+
+### Bulk Queries
+
+Avoid cache queries in loops. Use bulk fetching instead:
+
+```python
+# Bad: N cache queries
+for user_id in user_ids:
+    user = get_user_by_id(user_id)  # Cache query per iteration
+    process(user)
+
+# Good: 1 bulk query
+users = bulk_get_users_by_id(user_ids)  # Single bulk cache query
+for user in users:
+    process(user)
+```
+
+### generate_bulk_cached_fetch
+
+Zulip provides `generate_bulk_cached_fetch` for complex bulk operations:
+
+```python
+from zerver.lib.cache import generate_bulk_cached_fetch
+
+def bulk_get_users(user_ids: list[int]) -> dict[int, UserProfile]:
+    return bulk_cached_fetch(
+        cache_key_function=user_profile_by_id_cache_key,
+        query_function=lambda ids: UserProfile.objects.filter(id__in=ids),
+        object_ids=user_ids,
+    )
+```
+
+This function:
+- Checks cache for all IDs
+- Queries DB only for cache misses
+- Stores newly fetched items in cache
+- Returns combined results
+
+### Data Marshalling
+
+Compress large objects before caching:
+
+```python
+import zlib
+import orjson
+
+def compress_for_cache(data: dict) -> bytes:
+    json_bytes = orjson.dumps(data)
+    return zlib.compress(json_bytes)
+
+def decompress_from_cache(compressed: bytes) -> dict:
+    json_bytes = zlib.decompress(compressed)
+    return orjson.loads(json_bytes)
+```
+
+This is especially useful for message objects, reducing network overhead between Django and memcached.
+
+## In-Process Caching
+
+Zulip generally avoids in-process caching (since production uses multiple servers), but has a few cases:
+
+### Request-Scoped Caching
+
+```python
+from zerver.lib.cache import cache_for_current_request
+
+@cache_for_current_request
+def get_linkifiers(realm: Realm) -> list[Linkifier]:
+    return list(Linkifier.objects.filter(realm=realm))
+```
+
+Caches values only for the lifetime of a single request. Automatically flushed by middleware at request start.
+
+**Use cases:**
+- Linkifiers
+- Display recipients
+- Data called multiple times per request
+
+### Deployment-Scoped Caching
+
+For data that:
+- Is expensive to construct
+- Never changes after deployment
+- Isn't needed for most requests
+
+```python
+# Example: SourceMap object for JavaScript error reporting
+sourcemap_cache: dict[str, SourceMap] = {}
+
+def get_sourcemap() -> SourceMap:
+    if 'current' not in sourcemap_cache:
+        sourcemap_cache['current'] = load_sourcemap_from_disk()
+    return sourcemap_cache['current']
+```
+
+## Browser-Side Caching
+
+Zulip clients cache extensive state locally:
+
+- User metadata (names, avatars)
+- Channel information
+- Recent message history
+- Emoji data
+- Settings
+
+### Initial State
+
+Fetched via `/register` endpoint (or `page_params` for web app):
+
+```javascript
+// Initial page load
+const initial_data = await fetch('/api/v1/register', {
+    event_types: ['message', 'realm', 'subscription', ...]
+});
+
+// Cache this data client-side
+store.updateCache(initial_data);
+```
+
+### Keeping Cache Fresh
+
+The [events system](https://zulip.readthedocs.io/en/latest/subsystems/events-system.html) keeps client state synchronized:
+
+```javascript
+// Server sends event when data changes
+{
+    "type": "realm_user",
+    "op": "update",
+    "person": {
+        "user_id": 123,
+        "full_name": "New Name"
+    }
+}
+
+// Client updates cache
+store.updateUser(event.person.user_id, event.person);
+```
+
+Clients must:
+1. Handle events to update cached state
+2. Rerender UI components that display modified data
+3. Maintain consistency between cache and display
+
+## Debugging Cache Issues
+
+### Check Cache Hit Rate
+
+```bash
+# Connect to memcached
+telnet localhost 11211
+
+# Get statistics
+stats
+
+# Look for:
+# get_hits: Number of successful fetches
+# get_misses: Number of failed fetches
+# Hit rate = hits / (hits + misses)
+```
+
+### View Cache Keys
+
+```python
+# In Django shell
+from zerver.lib.cache import get_cache_backend
+cache = get_cache_backend(None)
+
+# Check if key exists
+key = user_profile_by_email_realm_id_cache_key("user@example.com", 1)
+value = cache.get(key)
+print(value)  # None if not cached
+```
+
+### Clear Specific Keys
+
+```python
+from zerver.lib.cache import cache_delete
+
+key = user_profile_by_email_realm_id_cache_key("user@example.com", 1)
+cache_delete(key)
+```
+
+### Flush All Caches
+
+```bash
+# Development
+tools/run-dev  # Auto-flushes on start
+
+# Production
+/home/zulip/deployments/current/scripts/restart-server  # Flushes during restart
+```
+
+## Best Practices
+
+1. **Use accessor functions**: Call `get_user()`, not direct DB queries
+2. **Unique cache keys**: Different data needs different keys
+3. **Flush comprehensively**: When in doubt, flush related keys
+4. **Bulk operations**: Use bulk cache queries, not loops
+5. **Test with cache**: Write tests that verify cache behavior
+6. **Monitor cache usage**: Watch hit rates in production
+7. **Document cache keys**: Comment why each key exists
+
+## Related Resources
+
+- [Events System](https://zulip.readthedocs.io/en/latest/subsystems/events-system.html)
+- [Django Caching Documentation](https://docs.djangoproject.com/en/5.0/topics/cache/)
+- [Django Signals](https://docs.djangoproject.com/en/5.0/ref/signals/#post-save)

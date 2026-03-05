@@ -1,0 +1,600 @@
+---
+title: Frontend Architecture
+description: Understanding Zulip's web frontend structure and technologies
+---
+
+Zulip's web frontend is a single-page application built with JavaScript, TypeScript, and modern web technologies, designed for real-time communication.
+
+## Technology Stack
+
+<CardGroup cols={2}>
+  <Card title="JavaScript & TypeScript" icon="js">
+    Modern ES6+ code with TypeScript for type safety
+  </Card>
+  <Card title="jQuery" icon="code">
+    DOM manipulation and event handling
+  </Card>
+  <Card title="Handlebars" icon="fire">
+    Client-side templating for dynamic UI
+  </Card>
+  <Card title="Webpack" icon="box">
+    Module bundling and build process
+  </Card>
+</CardGroup>
+
+## Directory Structure
+
+```
+web/
+  ├── src/               # JavaScript/TypeScript source code
+  │   ├── compose.ts      # Message composition
+  │   ├── message_list.ts # Message list rendering
+  │   ├── stream_data.ts  # Channel data management
+  │   ├── people.ts       # User data management
+  │   └── ... (200+ modules)
+  │
+  ├── templates/        # Handlebars templates
+  │   ├── message.hbs
+  │   ├── compose.hbs
+  │   └── ... (100+ templates)
+  │
+  ├── styles/           # CSS stylesheets
+  │   ├── zulip.css       # Main stylesheet
+  │   ├── app_components.css
+  │   └── ... (organized by component)
+  │
+  ├── tests/            # Frontend unit tests
+  │   ├── compose.test.cjs
+  │   ├── people.test.cjs
+  │   └── ... (matching src/ structure)
+  │
+  └── e2e-tests/        # End-to-end Puppeteer tests
+      ├── message.test.ts
+      └── navigation.test.ts
+```
+
+## Core Modules
+
+### Message Handling
+
+**`message_list.ts`**
+
+Manages the display of messages in the UI:
+
+```typescript
+// Simplified example
+export class MessageList {
+    messages: Message[];
+    
+    add_message(message: Message): void {
+        this.messages.push(message);
+        this.render_message(message);
+    }
+    
+    render_message(message: Message): void {
+        const $row = render_message_row(message);
+        this.$container.append($row);
+    }
+}
+```
+
+**`message_store.ts`**
+
+Central storage for all message data:
+
+```typescript
+export const message_store = {
+    get(message_id: number): Message | undefined {
+        return stored_messages.get(message_id);
+    },
+    
+    add(message: Message): void {
+        stored_messages.set(message.id, message);
+    },
+};
+```
+
+**`compose.ts`**
+
+Handles message composition:
+
+```typescript
+export function send_message(): void {
+    const content = $("#compose-textarea").val();
+    const message_type = compose_state.get_message_type();
+    
+    channel.post({
+        url: "/json/messages",
+        data: {
+            type: message_type,
+            content,
+            // ... other fields
+        },
+        success() {
+            compose_actions.clear_compose_box();
+        },
+    });
+}
+```
+
+### Data Management
+
+**`stream_data.ts`**
+
+Manages channel (stream) data:
+
+```typescript
+export const stream_data = {
+    all_streams: Map<number, Stream>,
+    
+    get_sub(stream_id: number): Stream | undefined {
+        return this.all_streams.get(stream_id);
+    },
+    
+    add_sub(stream: Stream): void {
+        this.all_streams.set(stream.stream_id, stream);
+    },
+};
+```
+
+**`people.ts`**
+
+Manages user data:
+
+```typescript
+export const people = {
+    get_by_user_id(user_id: number): User | undefined {
+        return people_by_user_id.get(user_id);
+    },
+    
+    get_by_email(email: string): User | undefined {
+        return people_by_email.get(email);
+    },
+};
+```
+
+**`state_data.ts`**
+
+Global application state from the server:
+
+```typescript
+export const state_data = {
+    realm: RealmData,
+    user_settings: UserSettings,
+    realm_users: Map<number, User>,
+    // ... more state
+};
+```
+
+### Event Handling
+
+**`server_events.js`**
+
+Long-polling connection to receive real-time events:
+
+```javascript
+export function start() {
+    get_events({
+        queue_id,
+        last_event_id,
+        success(events) {
+            dispatch_normal_events(events);
+        },
+    });
+}
+```
+
+**`server_events_dispatch.js`**
+
+Routes events to appropriate handlers:
+
+```javascript
+export function dispatch_normal_event(event) {
+    switch (event.type) {
+        case "message":
+            message_events.handle_new_message(event);
+            break;
+        case "update_message":
+            message_events.handle_update_message(event);
+            break;
+        case "reaction":
+            reactions.handle_reaction_event(event);
+            break;
+        // ... handle 50+ event types
+    }
+}
+```
+
+### UI Components
+
+**`popovers.ts`**
+
+Manages popup menus and tooltips:
+
+```typescript
+export function show_user_profile(user_id: number): void {
+    const user = people.get_by_user_id(user_id);
+    const html = render_user_profile_modal(user);
+    show_popover(html);
+}
+```
+
+**`overlays.ts`**
+
+Manages modal dialogs and overlays:
+
+```typescript
+export function open_modal(modal_id: string): void {
+    $(modal_id).modal("show");
+    active_modal = modal_id;
+}
+```
+
+**`notifications.ts`**
+
+Handles desktop notifications:
+
+```typescript
+export function notify_message(message: Message): void {
+    if (should_send_desktop_notification(message)) {
+        new Notification("New message", {
+            body: message.content,
+            icon: "/static/images/logo.png",
+        });
+    }
+}
+```
+
+## Templating with Handlebars
+
+### Template Example
+
+**`web/templates/message.hbs`**
+
+```handlebars
+<div class="message_row" data-message-id="{{id}}">
+    <div class="message_sender">
+        <img class="avatar" src="{{sender_avatar}}" />
+        <span class="sender_name">{{sender_full_name}}</span>
+    </div>
+    <div class="message_content">
+        {{{content_html}}}
+    </div>
+    <div class="message_controls">
+        <i class="fa fa-smile-o reaction-button"></i>
+        <i class="fa fa-pencil edit-button"></i>
+    </div>
+</div>
+```
+
+### Using Templates
+
+```typescript
+import render_message from "../templates/message.hbs";
+
+const html = render_message({
+    id: message.id,
+    sender_avatar: message.avatar_url,
+    sender_full_name: message.sender_full_name,
+    content_html: message.content_html,
+});
+
+$("#message-list").append(html);
+```
+
+### Template Helpers
+
+Custom Handlebars helpers for common operations:
+
+```javascript
+Handlebars.registerHelper("t", function(str) {
+    // Translation helper
+    return i18n.t(str);
+});
+
+Handlebars.registerHelper("user_circle_class", function(user_id) {
+    return presence.get_status(user_id);
+});
+```
+
+## State Management
+
+### Global State
+
+Zulip uses a mix of module-level state and explicit state objects:
+
+```typescript
+// Module-level state
+const stored_messages = new Map<number, Message>();
+
+// Explicit state objects
+export const compose_state = {
+    message_type: "stream",
+    stream_id: null,
+    topic: "",
+    content: "",
+};
+```
+
+### State Updates
+
+State updates typically follow this pattern:
+
+<Steps>
+  <Step title="Update local state">
+    Modify the JavaScript state object
+  </Step>
+  <Step title="Update server state">
+    Send API request to persist changes
+  </Step>
+  <Step title="Update UI">
+    Re-render affected components
+  </Step>
+  <Step title="Handle events">
+    Receive event confirming change for other clients
+  </Step>
+</Steps>
+
+## API Communication
+
+### Channel Module
+
+**`channel.ts`**
+
+Wraps AJAX requests to the server:
+
+```typescript
+export function post(options: {
+    url: string;
+    data: Record<string, unknown>;
+    success?: (data: unknown) => void;
+    error?: (xhr: JQuery.jqXHR) => void;
+}): void {
+    $.ajax({
+        type: "POST",
+        url: options.url,
+        data: JSON.stringify(options.data),
+        contentType: "application/json",
+        success: options.success,
+        error: handle_error(options.error),
+    });
+}
+```
+
+### Example API Call
+
+```typescript
+import * as channel from "./channel";
+
+channel.post({
+    url: "/json/messages",
+    data: {
+        type: "stream",
+        to: "Denmark",
+        topic: "test",
+        content: "Hello, world!",
+    },
+    success(data) {
+        console.log("Message sent:", data.id);
+    },
+    error(xhr) {
+        ui_report.error("Failed to send message");
+    },
+});
+```
+
+## Build Process
+
+### Webpack Configuration
+
+Zulip uses webpack to bundle JavaScript:
+
+**Key features:**
+- Code splitting for faster page loads
+- Tree shaking to remove unused code
+- Source maps for debugging
+- Hot module replacement in development
+
+### Development Mode
+
+```bash
+# Starts webpack dev server with hot reload
+./tools/run-dev
+```
+
+Changes to JavaScript/TypeScript trigger automatic recompilation and browser reload.
+
+### Production Build
+
+```bash
+# Minifies and optimizes assets
+./tools/build-release-tarball
+```
+
+Production builds:
+- Minify JavaScript and CSS
+- Generate source maps
+- Optimize images
+- Create cache-busted filenames
+
+## Styling with CSS
+
+### CSS Organization
+
+```
+web/styles/
+  ├── zulip.css              # Main stylesheet
+  ├── app_components.css     # UI components
+  ├── message_list.css       # Message display
+  ├── compose.css            # Compose box
+  └── dark_theme.css         # Dark mode styles
+```
+
+### CSS Conventions
+
+```css
+/* Use BEM-like naming for clarity */
+.message_row {
+    padding: 10px;
+}
+
+.message_row__sender {
+    font-weight: bold;
+}
+
+.message_row--unread {
+    background-color: #f5f5f5;
+}
+```
+
+### CSS Variables
+
+```css
+:root {
+    --color-background: #ffffff;
+    --color-text: #333333;
+    --color-link: #0066cc;
+}
+
+[data-theme="dark"] {
+    --color-background: #1a1a1a;
+    --color-text: #e0e0e0;
+    --color-link: #4da6ff;
+}
+```
+
+## Performance Optimization
+
+### Lazy Loading
+
+Load code only when needed:
+
+```typescript
+// Load heavy module only when needed
+async function open_image_editor(image_url: string): Promise<void> {
+    const {ImageEditor} = await import("./image_editor");
+    const editor = new ImageEditor(image_url);
+    editor.show();
+}
+```
+
+### Virtual Scrolling
+
+Render only visible messages for performance:
+
+```typescript
+class MessageListView {
+    render_windows(): void {
+        // Only render messages in viewport
+        const visible_messages = this.compute_visible_messages();
+        this.render_messages(visible_messages);
+    }
+}
+```
+
+### Debouncing and Throttling
+
+```typescript
+import {throttle} from "lodash";
+
+// Throttle scroll events
+const handle_scroll = throttle(() => {
+    message_viewport.update_visible_messages();
+}, 100);
+
+$("#message_feed_container").on("scroll", handle_scroll);
+```
+
+## Testing
+
+### Unit Tests
+
+Node-based tests for individual modules:
+
+```javascript
+// web/tests/compose.test.cjs
+const {strict: assert} = require("assert");
+
+const compose = require("../src/compose");
+
+run_test("send_message", () => {
+    compose.start("stream", {stream_id: 1, topic: "test"});
+    compose_state.message_content("Hello");
+    
+    compose.send_message();
+    
+    assert.equal(last_request.url, "/json/messages");
+    assert.equal(last_request.data.content, "Hello");
+});
+```
+
+### End-to-End Tests
+
+Puppeteer tests for full user flows:
+
+```typescript
+// web/e2e-tests/message.test.ts
+test("send stream message", async () => {
+    await page.goto("http://localhost:9991");
+    await page.click("#compose_buttons .fa-pencil");
+    await page.type("#stream_message_recipient_topic", "test topic");
+    await page.type("#compose-textarea", "test message");
+    await page.click("#compose-send-button");
+    
+    await page.waitForSelector(".message_row:last-child");
+    const message_text = await page.$eval(
+        ".message_row:last-child .message_content",
+        el => el.textContent
+    );
+    expect(message_text).toBe("test message");
+});
+```
+
+See [Frontend Testing](/development/testing/frontend) for details.
+
+## Common Patterns
+
+### Event-Driven Updates
+
+```typescript
+// Listen for events from server
+server_events_dispatch.register_handler("message", (event) => {
+    message_list.add_message(event.message);
+});
+
+// Trigger custom events
+$(document).trigger("message_sent.zulip", [message_id]);
+
+// Listen for custom events
+$(document).on("message_sent.zulip", (e, message_id) => {
+    // Handle message sent
+});
+```
+
+### Progressive Enhancement
+
+Start with server-rendered HTML, enhance with JavaScript:
+
+```typescript
+// Server renders initial message list
+// JavaScript adds interactivity
+message_list.initialize_from_dom();
+message_list.enable_live_updates();
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Real-time Events" icon="bolt" href="/development/architecture/realtime-events">
+    Understand the event system
+  </Card>
+  <Card title="Frontend Testing" icon="flask" href="/development/testing/frontend">
+    Write frontend tests
+  </Card>
+  <Card title="Markdown Processing" icon="markdown" href="/development/architecture/markdown">
+    Learn about markdown rendering
+  </Card>
+  <Card title="New Feature Tutorial" icon="wand-magic-sparkles" href="/development/tutorials/new-feature">
+    Add a complete feature
+  </Card>
+</CardGroup>

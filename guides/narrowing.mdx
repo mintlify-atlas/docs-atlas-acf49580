@@ -1,0 +1,404 @@
+---
+title: Narrowing & Search
+description: Understand how to construct narrows and search for messages in Zulip
+---
+
+A **narrow** is a set of filters for Zulip messages based on various factors like sender, channel, topic, search keywords, and more. Narrows are used throughout the Zulip API, most importantly when fetching messages.
+
+## Basic Narrow Structure
+
+A narrow is encoded as a JSON array of filter objects. Each filter has an `operator`, an `operand`, and optionally a `negated` flag.
+
+### Example Narrow
+
+Consider this search query:
+
+```
+channel:announce -sender:iago@zulip.com cool sunglasses
+```
+
+This filters for messages in the `announce` channel, not sent by `iago@zulip.com`, containing the words "cool" and "sunglasses".
+
+JSON encoding:
+
+```json
+[
+  {
+    "operator": "channel",
+    "operand": "announce"
+  },
+  {
+    "operator": "sender",
+    "operand": "iago@zulip.com",
+    "negated": true
+  },
+  {
+    "operator": "search",
+    "operand": "cool sunglasses"
+  }
+]
+```
+
+## Common Search Operators
+
+### Channel Operators
+
+**Single Channel:**
+```json
+{
+  "operator": "channel",
+  "operand": "announce"
+}
+```
+
+**Multiple Channels:**
+```json
+{
+  "operator": "channels",
+  "operand": ["announce", "general"]
+}
+```
+
+<Note>
+The `channel` and `channels` operators are aliases for `stream` and `streams` respectively (added in Zulip 9.0, feature level 250).
+</Note>
+
+### Topic Operators
+
+```json
+{
+  "operator": "topic",
+  "operand": "API design"
+}
+```
+
+<Info>
+When using `realm_empty_topic_display_name` (from [POST /register](/api/register-queue)) as an operand, it's interpreted as an empty string.
+</Info>
+
+### Direct Message Operators
+
+**1-on-1 DM:**
+```json
+{
+  "operator": "dm",
+  "operand": "user@example.com"
+}
+```
+
+**Group DM:**
+```json
+{
+  "operator": "dm",
+  "operand": ["user1@example.com", "user2@example.com"]
+}
+```
+
+**All DMs:**
+```json
+{
+  "operator": "is",
+  "operand": "dm"
+}
+```
+
+**DMs Including User:**
+```json
+{
+  "operator": "dm-including",
+  "operand": "user@example.com"
+}
+```
+
+<Note>
+The `dm`, `is:dm`, and `dm-including` operators were added in Zulip 7.0 (feature level 177) to replace the deprecated `pm-with`, `is:private`, and `group-pm-with` operators.
+</Note>
+
+### Sender Operator
+
+```json
+{
+  "operator": "sender",
+  "operand": "user@example.com"
+}
+```
+
+### Search Operator
+
+Full-text search across message content:
+
+```json
+{
+  "operator": "search",
+  "operand": "search terms here"
+}
+```
+
+## Using IDs in Narrows
+
+### Message IDs
+
+**Single Message:**
+```json
+{
+  "operator": "id",
+  "operand": 12345
+}
+```
+
+Returns only the message with ID 12345 if it exists and is accessible.
+
+**Conversation Context:**
+```json
+{
+  "operator": "with",
+  "operand": 12345
+}
+```
+
+The `with` operator (added in Zulip 9.0, feature level 271) returns messages in the conversation containing message 12345. This is designed for permanent links that work even when topics are moved or resolved.
+
+If the message exists and is accessible, it returns messages with the appropriate `channel`/`topic`/`dm` operators corresponding to the current conversation, replacing any such operators in the original narrow.
+
+<Tip>
+The `near` operator mentioned in the help center is used with the `anchor` parameter in endpoints like [GET /messages](/api/get-messages), not in the narrow itself.
+</Tip>
+
+### Channel and User IDs
+
+You can use IDs instead of names/emails:
+
+**Channel by ID:**
+```json
+{
+  "operator": "channel",
+  "operand": 1234
+}
+```
+
+**Sender by ID:**
+```json
+{
+  "operator": "sender",
+  "operand": 1234
+}
+```
+
+**DM by User IDs:**
+```json
+{
+  "operator": "dm",
+  "operand": [1234, 5678]
+}
+```
+
+**DM Including User ID:**
+```json
+{
+  "operator": "dm-including",
+  "operand": 1234
+}
+```
+
+## Status Filters
+
+### Read/Unread Status
+
+```json
+{
+  "operator": "is",
+  "operand": "unread"
+}
+```
+
+<Info>
+The `is:unread` filter takes advantage of database indexing, making it an important optimization for certain operations.
+</Info>
+
+### Starred Messages
+
+```json
+{
+  "operator": "is",
+  "operand": "starred"
+}
+```
+
+### Mentioned Messages
+
+```json
+{
+  "operator": "is",
+  "operand": "mentioned"
+}
+```
+
+**Direct Mentions Only:**
+```json
+{
+  "operator": "mentions",
+  "operand": 1234
+}
+```
+
+<Info>
+The `mentions` operator for specific users was added in Zulip 12.0 (feature level 446).
+</Info>
+
+### Followed Topics
+
+```json
+{
+  "operator": "is",
+  "operand": "followed"
+}
+```
+
+Added in Zulip 9.0 (feature level 265).
+
+### Muted Content
+
+```json
+{
+  "operator": "is",
+  "operand": "muted"
+}
+```
+
+Matches messages in topics and channels the user has muted (added in Zulip 10.0, feature level 366).
+
+## Content Filters
+
+### Has Reactions
+
+```json
+{
+  "operator": "has",
+  "operand": "reaction"
+}
+```
+
+Returns messages with at least one emoji reaction (added in Zulip 9.0, feature level 249).
+
+### Has Links
+
+```json
+{
+  "operator": "has",
+  "operand": "link"
+}
+```
+
+### Has Images
+
+```json
+{
+  "operator": "has",
+  "operand": "image"
+}
+```
+
+### Has Attachments
+
+```json
+{
+  "operator": "has",
+  "operand": "attachment"
+}
+```
+
+## Negation
+
+Any operator can be negated using the `negated` field:
+
+```json
+{
+  "operator": "channel",
+  "operand": "announce",
+  "negated": true
+}
+```
+
+This matches messages NOT in the announce channel.
+
+## Combining Operators
+
+Multiple operators work as an AND filter:
+
+```json
+[
+  {
+    "operator": "channel",
+    "operand": "announce"
+  },
+  {
+    "operator": "topic",
+    "operand": "releases"
+  },
+  {
+    "operator": "is",
+    "operand": "starred"
+  }
+]
+```
+
+This returns starred messages in the "releases" topic of the "announce" channel.
+
+## Search Scope
+
+<Warning>
+Many narrows, including those lacking a `channel` or `channels` operator, search the current user's personal message history only. See [searching shared history](/help/search-for-messages#search-shared-history) for details.
+</Warning>
+
+## Practical Examples
+
+### All unread mentions
+
+```json
+[
+  {
+    "operator": "is",
+    "operand": "mentioned"
+  },
+  {
+    "operator": "is",
+    "operand": "unread"
+  }
+]
+```
+
+### Recent messages from a user in a channel
+
+```json
+[
+  {
+    "operator": "channel",
+    "operand": "development"
+  },
+  {
+    "operator": "sender",
+    "operand": "alice@example.com"
+  }
+]
+```
+
+### Messages with images in followed topics
+
+```json
+[
+  {
+    "operator": "is",
+    "operand": "followed"
+  },
+  {
+    "operator": "has",
+    "operand": "image"
+  }
+]
+```
+
+## Related Resources
+
+- [Search for messages](/help/search-for-messages)
+- [GET /messages](/api/get-messages)
+- [Update message flags](/api/update-message-flags-for-narrow)

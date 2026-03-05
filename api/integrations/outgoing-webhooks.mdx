@@ -1,0 +1,378 @@
+---
+title: 'Outgoing Webhooks'
+description: 'Send Zulip messages to external services'
+---
+
+## Overview
+
+Outgoing webhooks allow you to send messages from Zulip to external services. This enables building command-based integrations, forwarding messages to external systems, and triggering actions based on Zulip activity.
+
+## How It Works
+
+1. User sends a message in Zulip
+2. Message matches trigger criteria (e.g., mentions bot)
+3. Zulip sends HTTP POST to your webhook endpoint
+4. Your service processes the request
+5. Service responds with optional message content
+6. Zulip posts the response back to the channel
+
+## Setting Up Outgoing Webhooks
+
+<Steps>
+  <Step title="Create a Bot">
+    Go to **Settings** → **Your bots** → **Add a new bot**
+    
+    Select **Outgoing webhook** as the bot type.
+  </Step>
+  
+  <Step title="Configure Endpoint URL">
+    Enter the URL of your webhook endpoint:
+    
+    ```
+    https://your-service.com/webhook
+    ```
+  </Step>
+  
+  <Step title="Choose Interface">
+    Select how the bot is triggered:
+    - **Generic** - Bot processes all mentions
+    - **Slack-compatible** - Uses Slack slash command format
+  </Step>
+  
+  <Step title="Deploy Your Service">
+    Create a web service that receives and processes webhook POSTs.
+  </Step>
+</Steps>
+
+## Webhook Payload
+
+Zulip sends a POST request with this JSON payload:
+
+```json
+{
+  "bot_email": "bot@example.com",
+  "bot_full_name": "My Bot",
+  "data": "@**My Bot** translate Hello",
+  "trigger": "mention",
+  "message": {
+    "id": 12345,
+    "sender_id": 10,
+    "sender_full_name": "Alice",
+    "sender_email": "alice@example.com",
+    "type": "stream",
+    "display_recipient": "general",
+    "subject": "Translation Request",
+    "content": "@**My Bot** translate Hello",
+    "timestamp": 1594825416
+  },
+  "token": "abcd1234..."
+}
+```
+
+**Key Fields:**
+- `data` - The message content
+- `message` - Full message object
+- `token` - Webhook verification token
+- `trigger` - How the webhook was triggered
+
+## Building a Webhook Service
+
+### Python Example (Flask)
+
+```python
+from flask import Flask, request, jsonify
+import requests
+
+app = Flask(__name__)
+WEBHOOK_TOKEN = "your_webhook_token"
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    data = request.json
+    
+    # Verify token
+    if data.get('token') != WEBHOOK_TOKEN:
+        return jsonify({"error": "Invalid token"}), 403
+    
+    # Extract message content
+    message_content = data.get('data', '')
+    sender = data['message']['sender_full_name']
+    
+    # Process the command
+    if 'translate' in message_content:
+        text = message_content.replace('@**My Bot**', '').replace('translate', '').strip()
+        response = translate(text)  # Your translation logic
+        
+        return jsonify({
+            "content": f"Translation: {response}"
+        })
+    
+    return jsonify({
+        "content": "I didn't understand that command."
+    })
+
+def translate(text):
+    # Your translation logic here
+    return f"{text} (translated)"
+
+if __name__ == '__main__':
+    app.run(port=5000)
+```
+
+### Node.js Example (Express)
+
+```javascript
+const express = require('express');
+const app = express();
+
+const WEBHOOK_TOKEN = 'your_webhook_token';
+
+app.use(express.json());
+
+app.post('/webhook', (req, res) => {
+  const { token, data, message } = req.body;
+  
+  // Verify token
+  if (token !== WEBHOOK_TOKEN) {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+  
+  // Process command
+  if (data.includes('translate')) {
+    const text = data.replace(/@\*\*.*?\*\*/, '').replace('translate', '').trim();
+    const translation = translate(text);
+    
+    return res.json({
+      content: `Translation: ${translation}`
+    });
+  }
+  
+  res.json({
+    content: "I didn't understand that command."
+  });
+});
+
+function translate(text) {
+  // Your translation logic
+  return `${text} (translated)`;
+}
+
+app.listen(5000, () => {
+  console.log('Webhook server running on port 5000');
+});
+```
+
+## Response Format
+
+Your webhook endpoint should return JSON:
+
+```json
+{
+  "content": "Response message in Markdown"
+}
+```
+
+The response can include:
+- **Markdown formatting**
+- **Links**
+- **Code blocks**
+- **Emoji**
+- **Mentions**
+
+### Empty Response
+
+Return empty content if you don't want the bot to reply:
+
+```json
+{
+  "content": ""
+}
+```
+
+## Command Parsing
+
+Common patterns for parsing bot commands:
+
+```python
+def parse_command(message_content, bot_name):
+    # Remove bot mention
+    text = message_content.replace(f'@**{bot_name}**', '').strip()
+    
+    # Split into command and arguments
+    parts = text.split(maxsplit=1)
+    command = parts[0].lower() if parts else ''
+    args = parts[1] if len(parts) > 1 else ''
+    
+    return command, args
+
+# Usage
+command, args = parse_command(data['data'], 'My Bot')
+
+if command == 'translate':
+    result = translate(args)
+elif command == 'weather':
+    result = get_weather(args)
+elif command == 'help':
+    result = show_help()
+else:
+    result = "Unknown command. Type 'help' for available commands."
+```
+
+## Security
+
+<AccordionGroup>
+  <Accordion title="Token Verification">
+    Always verify the webhook token:
+    
+    ```python
+    if data.get('token') != EXPECTED_TOKEN:
+        return {"error": "Unauthorized"}, 403
+    ```
+    
+    The token is shown when creating the outgoing webhook bot.
+  </Accordion>
+  
+  <Accordion title="HTTPS Only">
+    Use HTTPS for your webhook endpoint to encrypt data in transit.
+    
+    Let's Encrypt provides free SSL certificates.
+  </Accordion>
+  
+  <Accordion title="Input Validation">
+    Validate and sanitize user input before processing:
+    
+    ```python
+    import re
+    
+    def sanitize_input(text):
+        # Remove potentially harmful content
+        text = re.sub(r'[^\w\s-]', '', text)
+        return text[:500]  # Limit length
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Error Handling
+
+Handle errors gracefully:
+
+```python
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    try:
+        data = request.json
+        
+        # Process command
+        result = process_command(data)
+        
+        return jsonify({"content": result})
+        
+    except Exception as e:
+        # Log error
+        app.logger.error(f"Webhook error: {e}")
+        
+        # Return user-friendly message
+        return jsonify({
+            "content": "Sorry, I encountered an error processing your request."
+        })
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Translation Bot">
+    Translate messages to different languages:
+    
+    ```
+    @bot translate to Spanish: Hello world
+    > Hola mundo
+    ```
+  </Accordion>
+  
+  <Accordion title="Task Management">
+    Create tasks in external systems:
+    
+    ```
+    @bot create task: Fix bug in login
+    > Task #123 created in Jira
+    ```
+  </Accordion>
+  
+  <Accordion title="Information Lookup">
+    Fetch information from external APIs:
+    
+    ```
+    @bot weather San Francisco
+    > Current weather: 72°F, Sunny
+    ```
+  </Accordion>
+  
+  <Accordion title="Custom Commands">
+    Build organization-specific commands:
+    
+    ```
+    @bot deploy staging
+    > Deployment to staging started...
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Testing
+
+Test your webhook locally:
+
+```bash
+# Start your webhook server
+python webhook_server.py
+
+# Use ngrok for public URL
+ngrok http 5000
+
+# Update bot endpoint URL to ngrok URL
+# https://abc123.ngrok.io/webhook
+
+# Test in Zulip
+@My Bot test command
+```
+
+## Deployment
+
+Deploy your webhook service:
+
+- **Heroku** - Easy deployment with free tier
+- **AWS Lambda** - Serverless option
+- **Google Cloud Functions** - Serverless alternative
+- **Your own server** - Full control
+
+## Slack Compatibility
+
+Zulip supports Slack-compatible webhooks:
+
+```json Slack-style Payload
+{
+  "token": "abc123",
+  "team_id": "T123",
+  "user_name": "alice",
+  "text": "command arguments",
+  "command": "/mycommand"
+}
+```
+
+This allows running Slack slash commands on Zulip with minimal changes.
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Incoming Webhooks" icon="webhook" href="/api/integrations/incoming-webhooks">
+    Receive data into Zulip
+  </Card>
+  <Card title="Bots" icon="robot" href="/api/integrations/bots">
+    Build full-featured bots
+  </Card>
+  <Card title="Real-time Events" icon="bolt" href="/api/events/register">
+    Subscribe to Zulip events
+  </Card>
+  <Card title="Send Messages" icon="paper-plane" href="/api/messages/send">
+    Send messages via API
+  </Card>
+</CardGroup>

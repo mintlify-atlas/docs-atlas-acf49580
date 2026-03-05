@@ -1,0 +1,114 @@
+---
+title: 'Update a Channel'
+description: 'PATCH /api/v1/streams/{stream_id} - Update channel settings'
+---
+
+## Endpoint
+
+```
+PATCH /api/v1/streams/{stream_id}
+```
+
+Update settings for a channel.
+
+## Path Parameters
+
+<ParamField path="stream_id" type="integer" required>
+  The ID of the channel to update.
+</ParamField>
+
+## Request Parameters
+
+<ParamField body="description" type="string">
+  New description for the channel.
+</ParamField>
+
+<ParamField body="new_name" type="string">
+  New name for the channel.
+</ParamField>
+
+<ParamField body="is_private" type="boolean">
+  Whether the channel is private.
+  
+  Can only change from public to private (not vice versa).
+</ParamField>
+
+<ParamField body="is_web_public" type="boolean">
+  Whether the channel is web-public.
+</ParamField>
+
+<ParamField body="history_public_to_subscribers" type="boolean">
+  Whether channel history is public to subscribers.
+</ParamField>
+
+<ParamField body="is_default_stream" type="boolean">
+  Whether this is a default channel for new users.
+</ParamField>
+
+<ParamField body="message_retention_days" type="integer | string">
+  Message retention period in days, `"unlimited"`, or `"realm_default"`.
+</ParamField>
+
+## Response
+
+<ResponseField name="result" type="string">
+  `"success"` on successful update.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X PATCH https://your-domain.zulipchat.com/api/v1/streams/42 \
+  -u email@example.com:API_KEY \
+  -d 'description=Updated channel description' \
+  -d 'new_name=NewChannelName'
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Update description
+result = client.update_stream({
+    "stream_id": 42,
+    "description": "Updated channel description"
+})
+
+# Rename channel
+result = client.update_stream({
+    "stream_id": 42,
+    "new_name": "NewChannelName"
+})
+
+# Make channel private
+result = client.update_stream({
+    "stream_id": 42,
+    "is_private": True
+})
+```
+
+```javascript JavaScript
+const params = {
+  stream_id: 42,
+  description: 'Updated channel description',
+  new_name: 'NewChannelName'
+};
+
+const result = await client.streams.update(params);
+```
+
+</CodeGroup>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Channels" icon="list" href="/api/streams/list">
+    Get all channels
+  </Card>
+  <Card title="Subscribe" icon="user-plus" href="/api/streams/subscribe">
+    Subscribe to channels
+  </Card>
+</CardGroup>

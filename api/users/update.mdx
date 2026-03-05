@@ -1,0 +1,62 @@
+---
+title: 'Update a User'
+description: 'PATCH /api/v1/users/{user_id} - Update user details'
+---
+
+## Endpoint
+
+```
+PATCH /api/v1/users/{user_id}
+```
+
+Update a user's details. Requires appropriate permissions.
+
+## Path Parameters
+
+<ParamField path="user_id" type="integer" required>
+  The ID of the user to update.
+</ParamField>
+
+## Request Parameters
+
+<ParamField body="full_name" type="string">
+  New full name for the user.
+</ParamField>
+
+<ParamField body="role" type="integer">
+  New role for the user (requires admin permissions).
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X PATCH https://your-domain.zulipchat.com/api/v1/users/42 \
+  -u email@example.com:API_KEY \
+  -d 'full_name=Updated Name'
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+result = client.update_user({
+    "user_id": 42,
+    "full_name": "Updated Name"
+})
+```
+
+</CodeGroup>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Users" icon="users" href="/api/users/list">
+    Get all users
+  </Card>
+  <Card title="Create User" icon="user-plus" href="/api/users/create">
+    Create new users
+  </Card>
+</CardGroup>

@@ -1,0 +1,393 @@
+---
+title: Markdown Processing
+description: How Zulip processes and renders Markdown messages
+---
+
+Zulip uses a specialized flavor of Markdown/CommonMark for message formatting. This document explains Zulip's Markdown implementation, including both backend and frontend processors.
+
+## Overview
+
+Zulip's Markdown flavor extends standard Markdown with important features for chat:
+
+- Quote blocks
+- Math blocks
+- Link previews
+- @-mentions (users, channels, user groups)
+- Custom emoji
+- Linkifiers (custom regex-based link patterns)
+- Spoilers
+
+The implementation prioritizes minimizing formatting errors in the fast-paced chat context.
+
+## Dual Implementation
+
+Zulip maintains two Markdown processors:
+
+### Backend Processor
+
+**Location**: `zerver/lib/markdown/`
+
+- Based on [Python-Markdown](https://pypi.python.org/pypi/Markdown)
+- Authoritatively renders messages to HTML
+- Implements complex/expensive features:
+  - Twitter API queries for rich tweet embeds
+  - Link previews
+  - Database lookups for mentions
+  - Custom emoji resolution
+
+### Frontend Processor
+
+**Location**: `web/src/echo.ts`
+
+- Based on [marked.js](https://github.com/chjj/marked)
+- Provides instant local echo for message senders
+- Lightweight and fast
+- Skips backend-only features
+
+### Backend-Only Syntax Detection
+
+The function `markdown.contains_backend_only_syntax` checks if a message requires backend rendering:
+
+```javascript
+// If true, don't echo the message until backend returns HTML
+if (markdown.contains_backend_only_syntax(message_content)) {
+    // Wait for authoritative backend rendering
+}
+```
+
+If incorrectly returns `false`, the sender will see a brief flash when the backend rendering replaces the frontend version.
+
+## Zulip's Markdown Philosophy
+
+Zulip's Markdown design minimizes two types of errors:
+
+1. **Accidental syntax triggering** - Users shouldn't need to edit messages because normal text accidentally triggered formatting (e.g., `char *` triggering italics)
+
+2. **Syntax usage errors** - When users intentionally use Markdown, it should work correctly the first time
+
+These are minor issues for blogs but major problems in instant messaging where:
+
+- Messages are sent before being fully reviewed
+- Editing after sending is visible to all recipients
+- Writing happens quickly
+
+## Major Syntax Changes
+
+Zulip modifies standard Markdown in several ways:
+
+### Basic Syntax
+
+```markdown
+# Italics: Only * not _
+*italic text*  ✓
+_not italic_   ✗
+
+# Bold: Only ** not __
+**bold text**  ✓
+__not bold__   ✗
+
+# Strikethrough
+~~deleted text~~
+
+# Line breaks: nl2br enabled
+First line
+Second line  # Creates <br> automatically
+```
+
+### Lists
+
+```markdown
+# Only * for bullets (not + or -)
+* First item
+* Second item
+
+# No blank line required before list
+Here's a list:
+* Item 1
+* Item 2
+
+# Ordered lists disabled
+# (auto-renumbering confuses multi-message lists)
+```
+
+### Links
+
+```markdown
+# Auto-linkification enabled
+http://example.com
+t.co/foo
+
+# Absolute links enforced
+[Google](google.com)  # Goes to http://google.com
+
+# Link-by-reference disabled
+[foo][bar] ... [bar]: https://google.com  ✗
+
+# Channel mentions
+#**channel-name**
+```
+
+### Code
+
+```markdown
+# Fenced code blocks with syntax highlighting
+```python
+def hello():
+    print("world")
+```
+
+# Inline code
+`code here`
+```
+
+### Headings
+
+```markdown
+# Heading syntax (only #, not ==)
+# Heading 1
+## Heading 2
+### Heading 3
+```
+
+### Other
+
+```markdown
+# Images disabled (rendered as previews instead)
+![alt](image.png)  ✗
+
+# Quote blocks
+~~~ quote
+Quoted text here
+~~~
+
+# Escape syntax disabled
+# (use code blocks instead)
+```
+
+## Implementation Details
+
+### Main Backend File
+
+**`zerver/lib/markdown/__init__.py`** - Main processor implementation
+
+Key components:
+
+```python
+def do_convert(
+    content: str,
+    message_realm: Realm,
+    sent_by_bot: bool = False,
+    translate_emoticons: bool = False,
+    mention_data: MentionData | None = None,
+    # ...
+) -> MessageRenderingResult:
+    """Convert Markdown to HTML."""
+```
+
+### Per-Realm Features
+
+Markdown rendering supports realm-specific data:
+
+- **Linkifiers** - Custom regex patterns that create links
+- **Custom emoji** - Organization-specific emoji
+- **Mentions** - User/channel/group mentions (requires name/ID lookups)
+- **Emoticon translation** - Convert text emoticons to emoji (user preference)
+
+This data is passed via `message_realm` and other arguments, attached to the processor object:
+
+```python
+_md_engine.zulip_db_data = {...}  # Realm-specific data
+```
+
+### Extension Files
+
+Zulip's Markdown extensions in `zerver/lib/markdown/`:
+
+- `fenced_code.py` - Syntax-highlighted code blocks
+- `help_settings_links.py` - Links to help documentation
+- `include.py` - Include external content
+- `nested_code_blocks.py` - Code blocks within other blocks
+- `tabbed_sections.py` - Tabbed content (for docs)
+- `api_arguments_table_generator.py` - API documentation tables
+- `static.py` - Static content handling
+
+## Testing
+
+### Backend Tests
+
+**`zerver/tests/test_markdown.py`** - Comprehensive Python tests
+
+```python
+class MarkdownTest(ZulipTestCase):
+    def test_inline_code(self) -> None:
+        msg = "`inline code`"
+        converted = markdown_convert_wrapper(msg)
+        self.assertEqual(
+            converted,
+            "<p><code>inline code</code></p>"
+        )
+```
+
+### Frontend Tests
+
+**`web/tests/markdown.test.cjs`** - JavaScript processor tests
+
+```javascript
+test("italics", () => {
+    assert.equal(
+        markdown.apply_markdown("*italic*"),
+        "<em>italic</em>"
+    );
+});
+```
+
+### Shared Fixtures
+
+**`zerver/tests/fixtures/markdown_test_cases.json`** - Test data used by both test suites
+
+Example fixture:
+
+```json
+{
+    "name": "inline_code",
+    "input": "`code`",
+    "expected_output": "<p><code>code</code></p>",
+    "text_content": "code"
+}
+```
+
+Fixture fields:
+
+- `expected_output` - Backend processor expected HTML
+- `marked_expected_output` - Frontend processor HTML (if different)
+- `backend_only_rendering` - Set to `true` if frontend shouldn't render
+- `text_content` - Plain text for mobile push notifications
+
+### Manual Frontend Testing
+
+To test frontend Markdown without backend interference:
+
+<Steps>
+  <Step title="Start Development Server">
+    Run `./tools/run-dev` and log in
+  </Step>
+  
+  <Step title="Stop Server">
+    Press Ctrl-C, leaving browser open
+  </Step>
+  
+  <Step title="Test Messages">
+    Compose and send messages - they'll be locally echoed using frontend rendering only
+  </Step>
+</Steps>
+
+## Modifying Markdown Syntax
+
+When adding new Markdown features, update:
+
+<Steps>
+  <Step title="Backend Processor">
+    `zerver/lib/markdown/__init__.py` - Add rendering logic
+  </Step>
+  
+  <Step title="Frontend Processor">
+    `web/src/markdown.ts` and possibly `web/third/marked/lib/marked.cjs`
+    
+    OR update `markdown.contains_backend_only_syntax` if frontend won't support it
+  </Step>
+  
+  <Step title="Typeahead (Optional)">
+    `web/src/composebox_typeahead.ts` - Add typeahead support for new syntax
+  </Step>
+  
+  <Step title="Tests">
+    Add test cases to `zerver/tests/fixtures/markdown_test_cases.json`
+  </Step>
+  
+  <Step title="Documentation">
+    Update `markdown_help_rows` in `web/src/info_overlay.ts`
+  </Step>
+</Steps>
+
+### Security Considerations
+
+<Warning>
+Markdown processor bugs can lead to XSS vulnerabilities. Never insert unsanitized HTML from third-party sources.
+</Warning>
+
+### Performance Considerations
+
+- Avoid expensive operations (new regexes are usually fine)
+- Third-party API requests must have timeouts
+- Backend processor runs in Python thread with timeout protection
+- Currently avoid database queries (implementation detail that could change)
+
+### Testing Requirements
+
+Every new feature needs:
+
+- ✓ Positive tests (feature works)
+- ✓ Negative tests (feature doesn't trigger accidentally)
+- ✓ Both tests in shared fixtures when possible
+
+## Example: Adding a New Feature
+
+Here's a simplified example of adding spoiler support:
+
+```python
+# zerver/lib/markdown/__init__.py
+
+class SpoilerPattern(markdown.inlinepatterns.Pattern):
+    def handleMatch(self, m: Match[str]) -> Element:
+        spoiler = markdown.util.etree.Element('div')
+        spoiler.set('class', 'spoiler-block')
+        spoiler.text = m.group(2)
+        return spoiler
+
+# Register pattern
+md.inlinePatterns.register(
+    SpoilerPattern(r'\|\|(.*?)\|\|'),
+    'spoiler',
+    priority
+)
+```
+
+```javascript
+// web/src/markdown.ts
+
+export function contains_backend_only_syntax(content) {
+    // Spoilers work in frontend too
+    return false;  // Don't add spoilers here
+}
+```
+
+```json
+// zerver/tests/fixtures/markdown_test_cases.json
+{
+    "name": "spoiler",
+    "input": "||spoiler text||",
+    "expected_output": "<div class='spoiler-block'>spoiler text</div>"
+}
+```
+
+## Related Documentation
+
+- [Message Sending](/subsystems/sending-messages) - How messages flow through the system
+- [Testing Documentation](/testing/overview) - Complete testing guide
+- [Writing Views](/tutorials/writing-views) - Backend view development
+
+## Key Files Reference
+
+### Backend
+- `zerver/lib/markdown/__init__.py` - Main processor (~2000 lines)
+- `zerver/lib/markdown/*.py` - Extensions
+- `zerver/tests/test_markdown.py` - Backend tests
+
+### Frontend  
+- `web/src/echo.ts` - Message echo logic
+- `web/src/markdown.ts` - Frontend processor
+- `web/third/marked/lib/marked.cjs` - Marked.js library
+- `web/tests/markdown.test.cjs` - Frontend tests
+
+### Shared
+- `zerver/tests/fixtures/markdown_test_cases.json` - Test fixtures

@@ -1,0 +1,313 @@
+---
+title: 'Update a Message'
+description: 'PATCH /api/v1/messages/{message_id} - Edit message content, topic, or channel'
+---
+
+## Endpoint
+
+```
+PATCH /api/v1/messages/{message_id}
+```
+
+Update the content, topic, or channel of a message.
+
+## Path Parameters
+
+<ParamField path="message_id" type="integer" required>
+  The ID of the message to update.
+</ParamField>
+
+## Request Parameters
+
+<ParamField body="content" type="string">
+  The new content for the message in Zulip-flavored Markdown.
+  
+  Only the message sender can edit content (subject to time limits and permissions).
+</ParamField>
+
+<ParamField body="topic" type="string">
+  The new topic for the message. Only valid for channel messages.
+  
+  To [resolve a topic](/help/resolve-a-topic), edit it to `✔ {original_topic}` with `propagate_mode="change_all"`.
+</ParamField>
+
+<ParamField body="stream_id" type="integer">
+  The channel ID to move the message to.
+  
+  Requires permission to move messages between channels.
+</ParamField>
+
+<ParamField body="propagate_mode" type="string" default="change_one">
+  Which messages to update when changing topic or channel:
+  
+  - `"change_one"` - Only this message
+  - `"change_later"` - This message and all following messages in the topic
+  - `"change_all"` - All messages in the topic
+</ParamField>
+
+<ParamField body="send_notification_to_old_thread" type="boolean" default="true">
+  Whether to send a notification to the old topic when moving messages.
+  
+  **Added in Zulip 3.0 (feature level 9)**
+</ParamField>
+
+<ParamField body="send_notification_to_new_thread" type="boolean" default="true">
+  Whether to send a notification to the new topic when moving messages.
+  
+  **Added in Zulip 3.0 (feature level 9)**
+</ParamField>
+
+## Response
+
+<ResponseField name="result" type="string">
+  `"success"` if the update was successful.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL - Edit Content
+curl -X PATCH https://your-domain.zulipchat.com/api/v1/messages/123 \
+  -u email@example.com:API_KEY \
+  -d 'content=Updated message content with **formatting**!'
+```
+
+```bash cURL - Change Topic
+curl -X PATCH https://your-domain.zulipchat.com/api/v1/messages/123 \
+  -u email@example.com:API_KEY \
+  -d 'topic=New Topic Name' \
+  -d 'propagate_mode=change_all'
+```
+
+```bash cURL - Resolve Topic
+curl -X PATCH https://your-domain.zulipchat.com/api/v1/messages/123 \
+  -u email@example.com:API_KEY \
+  -d 'topic=✔ Resolved Topic' \
+  -d 'propagate_mode=change_all'
+```
+
+```python Python
+import zulip
+
+client = zulip.Client(config_file="~/.zuliprc")
+
+# Edit message content
+result = client.update_message({
+    "message_id": 123,
+    "content": "Updated message content!"
+})
+
+print(result)
+# {'result': 'success', 'msg': ''}
+
+# Change topic for all messages
+result = client.update_message({
+    "message_id": 123,
+    "topic": "New Topic Name",
+    "propagate_mode": "change_all"
+})
+
+# Resolve a topic
+result = client.update_message({
+    "message_id": 123,
+    "topic": "✔ Resolved Topic",
+    "propagate_mode": "change_all"
+})
+
+# Move message to different channel
+result = client.update_message({
+    "message_id": 123,
+    "stream_id": 42,
+    "topic": "Moved Discussion",
+    "propagate_mode": "change_all"
+})
+```
+
+```javascript JavaScript
+const zulip = require('zulip-js');
+
+const config = {
+  username: 'email@example.com',
+  apiKey: 'your_api_key',
+  realm: 'https://your-domain.zulipchat.com'
+};
+
+const client = await zulip(config);
+
+// Edit message content
+const params = {
+  message_id: 123,
+  content: 'Updated message content!'
+};
+
+const result = await client.messages.update(params);
+console.log(result);
+
+// Change topic
+const topicParams = {
+  message_id: 123,
+  topic: 'New Topic Name',
+  propagate_mode: 'change_all'
+};
+
+const topicResult = await client.messages.update(topicParams);
+```
+
+</CodeGroup>
+
+## Response Examples
+
+<ResponseExample>
+
+```json Success Response
+{
+  "result": "success",
+  "msg": ""
+}
+```
+
+```json Error - Time Limit Exceeded
+{
+  "result": "error",
+  "msg": "The time limit for editing this message's content has passed",
+  "code": "BAD_REQUEST"
+}
+```
+
+```json Error - Move Time Limit
+{
+  "result": "error",
+  "msg": "The time limit for moving messages in this organization has passed",
+  "code": "MOVE_MESSAGES_TIME_LIMIT_EXCEEDED"
+}
+```
+
+```json Error - Permission Denied
+{
+  "result": "error",
+  "msg": "You don't have permission to edit this message",
+  "code": "BAD_REQUEST"
+}
+```
+
+</ResponseExample>
+
+## Permissions
+
+### Content Editing
+
+Message senders can edit their own message content if:
+
+- Organization allows message editing (`allow_message_editing` is enabled)
+- Within the time limit (`message_content_edit_limit_seconds`)
+- User has appropriate role/permissions
+
+Administrators and moderators can edit any message content.
+
+### Topic Editing
+
+Users can change message topics if:
+
+- They belong to `can_move_messages_between_topics_group`
+- Within `move_messages_within_stream_limit_seconds` (for non-admins)
+- The channel allows topic changes
+
+### Channel Moving
+
+Users can move messages between channels if:
+
+- They belong to `can_move_messages_between_channels_group`  
+- Within `move_messages_between_streams_limit_seconds` (for non-admins)
+- They have access to both source and destination channels
+
+### Topic Resolution
+
+Users can resolve topics if:
+
+- They belong to `can_resolve_topics_group`
+- Subject to standard topic editing permissions
+
+**Added in Zulip 10.0 (feature level 367)**
+
+<Info>
+  Time limits don't apply to organization administrators and moderators.
+</Info>
+
+## Propagation Modes
+
+When changing topics or channels, `propagate_mode` controls which messages are updated:
+
+<AccordionGroup>
+  <Accordion title="change_one">
+    Updates only the specified message.
+    
+    Use when making a one-off correction or moving a single message that was posted in the wrong place.
+  </Accordion>
+  
+  <Accordion title="change_later">
+    Updates the specified message and all messages sent after it in the topic.
+    
+    Use when a topic diverged into a new subject partway through the conversation.
+  </Accordion>
+  
+  <Accordion title="change_all">
+    Updates all messages in the topic, regardless of timestamp.
+    
+    Use when renaming a topic or resolving it. This is the most common mode for topic operations.
+  </Accordion>
+</AccordionGroup>
+
+## Resolving Topics
+
+To mark a topic as resolved:
+
+```python
+result = client.update_message({
+    "message_id": 123,  # Any message in the topic
+    "topic": "✔ " + original_topic,
+    "propagate_mode": "change_all"
+})
+```
+
+To unresolve:
+
+```python
+# Remove the ✔ prefix
+result = client.update_message({
+    "message_id": 123,
+    "topic": original_topic.replace("✔ ", ""),
+    "propagate_mode": "change_all"
+})
+```
+
+## Edit History
+
+When a message is edited, Zulip stores the edit history. Previous versions of the message content are preserved and visible to users through the message's edit history.
+
+Administrators can disable edit history visibility in organization settings.
+
+## Notifications
+
+When moving messages to a new topic/channel:
+
+- By default, Zulip posts a notification in both old and new locations
+- Disable with `send_notification_to_old_thread=false` or `send_notification_to_new_thread=false`
+- Notifications help users follow the conversation
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Send Message" icon="paper-plane" href="/api/messages/send">
+    Send a new message
+  </Card>
+  <Card title="Get Messages" icon="inbox" href="/api/messages/get">
+    Retrieve messages from Zulip
+  </Card>
+  <Card title="Delete Message" icon="trash" href="/api/messages/delete">
+    Delete a message permanently
+  </Card>
+  <Card title="Add Reaction" icon="smile" href="/api/messages/reactions">
+    React to a message
+  </Card>
+</CardGroup>

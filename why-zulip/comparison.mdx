@@ -1,0 +1,560 @@
+---
+title: Comparison with Other Chat Platforms
+description: How Zulip compares to Slack, Microsoft Teams, Discord, and other team chat applications
+---
+
+Choosing a team chat platform is an important decision. This guide compares Zulip with other popular chat applications to help you understand the differences and make an informed choice.
+
+## Quick Comparison Table
+
+<div className="overflow-x-auto my-6">
+  <table className="min-w-full border">
+    <thead>
+      <tr className="bg-gray-100 dark:bg-gray-800">
+        <th className="border px-4 py-2 text-left">Feature</th>
+        <th className="border px-4 py-2">Zulip</th>
+        <th className="border px-4 py-2">Slack</th>
+        <th className="border px-4 py-2">Teams</th>
+        <th className="border px-4 py-2">Discord</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Topic-based threading</td>
+        <td className="border px-4 py-2 text-center">✅</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+      </tr>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Async-friendly</td>
+        <td className="border px-4 py-2 text-center">✅✅</td>
+        <td className="border px-4 py-2 text-center">⚠️</td>
+        <td className="border px-4 py-2 text-center">⚠️</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+      </tr>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Open source</td>
+        <td className="border px-4 py-2 text-center">✅</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+      </tr>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Self-hosting</td>
+        <td className="border px-4 py-2 text-center">✅</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+      </tr>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Free plan history</td>
+        <td className="border px-4 py-2 text-center">10,000 msgs</td>
+        <td className="border px-4 py-2 text-center">90 days</td>
+        <td className="border px-4 py-2 text-center">Unlimited</td>
+        <td className="border px-4 py-2 text-center">Unlimited</td>
+      </tr>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Code formatting</td>
+        <td className="border px-4 py-2 text-center">✅✅</td>
+        <td className="border px-4 py-2 text-center">✅</td>
+        <td className="border px-4 py-2 text-center">✅</td>
+        <td className="border px-4 py-2 text-center">✅</td>
+      </tr>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">LaTeX math</td>
+        <td className="border px-4 py-2 text-center">✅</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+        <td className="border px-4 py-2 text-center">❌</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+## Zulip vs. Slack
+
+Slack is the most popular team chat platform, but Zulip offers significant advantages for organizations that value organized, async communication.
+
+### Organization Model
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
+  <div className="border border-red-300 rounded-lg p-4">
+    <h4 className="font-semibold mb-2 text-red-600">Slack</h4>
+    <p className="text-sm mb-3">All messages in a channel appear in one continuous stream. Threads are hidden in a sidebar.</p>
+    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded text-xs font-mono">
+      #engineering<br/>
+      Alice: Bug in production!<br/>
+      Bob: Anyone want lunch?<br/>
+      Carol: I'll look at the bug<br/>
+      Dave: Pizza sounds good<br/>
+      Alice: Thanks Carol!<br/>
+    </div>
+    <p className="text-sm mt-2 text-red-600">❌ Conversations interleave and get lost</p>
+  </div>
+  
+  <div className="border border-[#5c9cfc] rounded-lg p-4">
+    <h4 className="font-semibold mb-2 text-[#5c9cfc]">Zulip</h4>
+    <p className="text-sm mb-3">Messages organized by topic. Multiple conversations in one channel, all easy to follow.</p>
+    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded text-xs font-mono">
+      #engineering > Production bug<br/>
+      Alice: Bug in production!<br/>
+      Carol: I'll look at it<br/>
+      Alice: Thanks!<br/>
+      <br/>
+      #engineering > Lunch plans<br/>
+      Bob: Anyone want lunch?<br/>
+      Dave: Pizza sounds good<br/>
+    </div>
+    <p className="text-sm mt-2 text-[#5c9cfc]">✅ Each conversation stays organized</p>
+  </div>
+</div>
+
+### Key Differences
+
+<AccordionGroup>
+  <Accordion title="Catching up on messages">
+    **Slack**: When you return after being away, you see a wall of interleaved messages. Finding what's relevant requires scrolling through everything.
+    
+    **Zulip**: You see a list of topics with unread messages. Click a topic to read that conversation in full context. Skip topics that aren't relevant to you.
+    
+    **Winner: Zulip** - Saves significant time, especially for busy channels or after being away.
+  </Accordion>
+  
+  <Accordion title="Threads">
+    **Slack**: Threads are hidden in a sidebar. They're hard to discover, easy to miss, and awkward to navigate. Many teams don't use them effectively.
+    
+    **Zulip**: Topics ARE the threads, front and center in the main view. You can see all topics at once, navigate with keyboard shortcuts, and search easily.
+    
+    **Winner: Zulip** - Topics are far more usable than Slack's thread implementation.
+  </Accordion>
+  
+  <Accordion title="Async communication">
+    **Slack**: Designed for real-time chat. Conversations happen fast and it's hard to jump in later. Threads help but are often missed.
+    
+    **Zulip**: Designed for async. Topics let conversations span hours or days. Reply whenever convenient—your message appears in context.
+    
+    **Winner: Zulip** - Much better for teams across time zones or with flexible schedules.
+  </Accordion>
+  
+  <Accordion title="Free plan">
+    **Slack**: Free plan limits you to 90 days of message history. Older messages are deleted permanently.
+    
+    **Zulip**: Free plan includes 10,000 messages of searchable history. Plus, Zulip is open source—you can self-host for unlimited free usage.
+    
+    **Winner: Zulip** - Better free tier, and self-hosting option for unlimited usage.
+  </Accordion>
+  
+  <Accordion title="Integrations">
+    **Slack**: Thousands of apps in the app directory. Rich ecosystem.
+    
+    **Zulip**: 100+ native integrations covering most needs. Full REST API for custom integrations. Open source means you can build anything.
+    
+    **Winner: Tie** - Slack has more apps, but Zulip covers most use cases and offers more flexibility.
+  </Accordion>
+</AccordionGroup>
+
+### When to Choose Slack
+
+- You need specific integrations only available on Slack
+- Your organization is already heavily invested in Slack
+- You prefer real-time synchronous communication
+- You want the largest ecosystem of third-party apps
+
+### When to Choose Zulip
+
+- You want organized, async-friendly communication
+- You have team members across time zones
+- You want to preserve institutional knowledge
+- You value open source and data ownership
+- You want better free plan or self-hosting option
+
+## Zulip vs. Microsoft Teams
+
+Microsoft Teams is popular in enterprises, especially those using Microsoft 365.
+
+<CardGroup cols={2}>
+  <Card title="Teams Strengths" icon="microsoft">
+    - Deep Microsoft 365 integration
+    - Video calling with Office integration
+    - Included with many Microsoft licenses
+    - Enterprise-focused features
+  </Card>
+  
+  <Card title="Zulip Strengths" icon="comments">
+    - Topic-based organization
+    - Better async communication
+    - Open source and self-hostable
+    - Cleaner, more focused interface
+  </Card>
+</CardGroup>
+
+### Organization
+
+**Teams**: Similar to Slack—channels have one continuous feed. Has a "Posts" tab that tries to organize by thread, but it's clunky and rarely used effectively.
+
+**Zulip**: Every message has a topic. Clean organization that actually works.
+
+**Winner: Zulip** - Teams' organization features don't work well in practice.
+
+### Performance
+
+**Teams**: Can be slow and resource-heavy, especially with many channels or integrations.
+
+**Zulip**: Fast and lightweight. Efficient backend and frontend.
+
+**Winner: Zulip** - Noticeably faster and less resource-intensive.
+
+### When to Choose Teams
+
+- Your organization uses Microsoft 365 heavily
+- You need deep integration with Office apps
+- Video calling is a primary use case
+- You prefer a single vendor for all tools
+
+### When to Choose Zulip
+
+- You want a chat tool that doesn't feel bloated
+- Organization and searchability are important
+- You have distributed teams working async
+- You want modern, efficient software
+
+## Zulip vs. Discord
+
+Discord is popular for gaming communities and has grown into general community chat.
+
+### Design Philosophy
+
+**Discord**: Designed for real-time voice and text chat during gaming. Synchronous, social, casual.
+
+**Zulip**: Designed for organized team communication. Asynchronous, productive, professional.
+
+### Message Organization
+
+**Discord**: Channels are continuous feeds. Threads exist but are hidden and expire after inactivity.
+
+**Zulip**: Topic-based threading keeps all conversations organized permanently.
+
+**Winner: Zulip** for professional use; Discord for casual community chat.
+
+### Use Cases
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
+  <div className="border rounded-lg p-4">
+    <h4 className="font-semibold mb-2">Choose Discord for:</h4>
+    <ul className="text-sm space-y-1">
+      <li>✅ Gaming communities</li>
+      <li>✅ Casual social groups</li>
+      <li>✅ Voice chat priority</li>
+      <li>✅ Hobby communities</li>
+    </ul>
+  </div>
+  
+  <div className="border rounded-lg p-4 border-[#5c9cfc]">
+    <h4 className="font-semibold mb-2">Choose Zulip for:</h4>
+    <ul className="text-sm space-y-1">
+      <li>✅ Work teams</li>
+      <li>✅ Open source projects</li>
+      <li>✅ Research groups</li>
+      <li>✅ Educational institutions</li>
+      <li>✅ Any group that values organization</li>
+    </ul>
+  </div>
+</div>
+
+## Zulip vs. Mattermost
+
+Mattermost is an open-source Slack alternative, often compared to Zulip.
+
+### Similarities
+
+- Both are open source (Zulip: Apache 2.0, Mattermost: MIT/proprietary)
+- Both can be self-hosted
+- Both have cloud and self-hosted options
+- Both support team chat with channels
+
+### Key Difference: Organization
+
+**Mattermost**: Channels work like Slack—one continuous feed per channel. Threads exist but are sidebar-based.
+
+**Zulip**: Topic-based organization in every channel.
+
+**Winner: Zulip** - The topic model makes a huge difference in usability.
+
+### Open Source Model
+
+**Mattermost**: Core is open source, but many enterprise features require a proprietary license.
+
+**Zulip**: 100% open source. All features available in the open source version.
+
+**Winner: Zulip** - Truly open source without feature restrictions.
+
+### When to Choose Mattermost
+
+- You want a Slack clone that you can self-host
+- You're already familiar with Slack and don't want to learn new patterns
+- You need specific Mattermost enterprise features
+
+### When to Choose Zulip
+
+- You want better message organization
+- You value async communication
+- You want a fully open source solution
+- You're willing to learn a better paradigm
+
+## Zulip vs. Element/Matrix
+
+Element (Matrix) is a decentralized, federated communication platform.
+
+<CardGroup cols={2}>
+  <Card title="Element/Matrix" icon="network-wired">
+    **Focus**: Decentralized, federated, encrypted communication
+    
+    **Best for**:
+    - Privacy-focused organizations
+    - Decentralized communities
+    - Interoperability needs
+  </Card>
+  
+  <Card title="Zulip" icon="comments">
+    **Focus**: Organized, productive team chat
+    
+    **Best for**:
+    - Teams wanting efficiency
+    - Open source projects
+    - Organizations needing structure
+  </Card>
+</CardGroup>
+
+### Organization
+
+**Element**: Rooms (channels) with threading support, but threads are optional and not central to the experience.
+
+**Zulip**: Topics are mandatory and central. Every message is organized.
+
+**Winner: Zulip** for organized communication; Element for privacy/decentralization.
+
+## Feature Comparison Deep Dive
+
+### Message Formatting
+
+<div className="overflow-x-auto my-6">
+  <table className="min-w-full border text-sm">
+    <thead>
+      <tr className="bg-gray-100 dark:bg-gray-800">
+        <th className="border px-3 py-2 text-left">Feature</th>
+        <th className="border px-3 py-2">Zulip</th>
+        <th className="border px-3 py-2">Slack</th>
+        <th className="border px-3 py-2">Teams</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td className="border px-3 py-2">Markdown</td>
+        <td className="border px-3 py-2 text-center">✅ Full GFM</td>
+        <td className="border px-3 py-2 text-center">⚠️ Limited</td>
+        <td className="border px-3 py-2 text-center">⚠️ Limited</td>
+      </tr>
+      <tr>
+        <td className="border px-3 py-2">Code blocks with syntax highlighting</td>
+        <td className="border px-3 py-2 text-center">✅ 100+ languages</td>
+        <td className="border px-3 py-2 text-center">✅</td>
+        <td className="border px-3 py-2 text-center">✅</td>
+      </tr>
+      <tr>
+        <td className="border px-3 py-2">LaTeX math</td>
+        <td className="border px-3 py-2 text-center">✅</td>
+        <td className="border px-3 py-2 text-center">❌</td>
+        <td className="border px-3 py-2 text-center">❌</td>
+      </tr>
+      <tr>
+        <td className="border px-3 py-2">Emoji reactions</td>
+        <td className="border px-3 py-2 text-center">✅</td>
+        <td className="border px-3 py-2 text-center">✅</td>
+        <td className="border px-3 py-2 text-center">✅</td>
+      </tr>
+      <tr>
+        <td className="border px-3 py-2">Polls</td>
+        <td className="border px-3 py-2 text-center">✅ Built-in</td>
+        <td className="border px-3 py-2 text-center">⚠️ Via apps</td>
+        <td className="border px-3 py-2 text-center">⚠️ Via apps</td>
+      </tr>
+      <tr>
+        <td className="border px-3 py-2">Spoilers</td>
+        <td className="border px-3 py-2 text-center">✅</td>
+        <td className="border px-3 py-2 text-center">❌</td>
+        <td className="border px-3 py-2 text-center">❌</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+### Search Capabilities
+
+**Zulip**: Powerful search with operators like:
+```
+stream:engineering topic:"bug" sender:alice is:starred
+```
+Search by channel, topic, sender, content type, date range, and more.
+
+**Slack**: Good search with some operators. Can search by channel, sender, date.
+
+**Teams**: Basic search. Less powerful than Zulip or Slack.
+
+**Winner: Zulip** - Most powerful and flexible search.
+
+### Mobile Apps
+
+**All platforms** have mobile apps for iOS and Android.
+
+**Zulip**: Native Flutter apps. Fast, responsive, full feature parity with web.
+
+**Slack**: Mature mobile apps with good features.
+
+**Teams**: Mobile apps available but can be slow.
+
+**Discord**: Excellent mobile apps, optimized for voice.
+
+**Winner: Tie** - All have good mobile support; Zulip's are particularly efficient.
+
+## Cost Comparison
+
+<div className="overflow-x-auto my-6">
+  <table className="min-w-full border">
+    <thead>
+      <tr className="bg-gray-100 dark:bg-gray-800">
+        <th className="border px-4 py-2 text-left">Platform</th>
+        <th className="border px-4 py-2">Free Plan</th>
+        <th className="border px-4 py-2">Paid Plan</th>
+        <th className="border px-4 py-2">Enterprise</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Zulip Cloud</td>
+        <td className="border px-4 py-2">10K messages<br/>Unlimited users</td>
+        <td className="border px-4 py-2">$6.67/user/month<br/>Unlimited history</td>
+        <td className="border px-4 py-2">Custom pricing<br/>+ Premium support</td>
+      </tr>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Slack</td>
+        <td className="border px-4 py-2">90 days history<br/>Unlimited users</td>
+        <td className="border px-4 py-2">$7.25-12.50/user/month</td>
+        <td className="border px-4 py-2">Custom pricing</td>
+      </tr>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Teams</td>
+        <td className="border px-4 py-2">Limited (requires M365)</td>
+        <td className="border px-4 py-2">Part of M365<br/>$6-22/user/month</td>
+        <td className="border px-4 py-2">Part of M365 E3/E5</td>
+      </tr>
+      <tr>
+        <td className="border px-4 py-2 font-semibold">Discord</td>
+        <td className="border px-4 py-2">Free<br/>Unlimited history</td>
+        <td className="border px-4 py-2">$9.99/user/month<br/>Nitro perks</td>
+        <td className="border px-4 py-2">N/A</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<Info>
+  **Zulip self-hosting**: Free and open source. Unlimited users, messages, and features. Only costs are your infrastructure.
+</Info>
+
+## Migration from Other Platforms
+
+Zulip provides migration tools:
+
+<CardGroup cols={2}>
+  <Card title="From Slack" icon="slack">
+    Import all messages, channels, users, and files with official import tool
+  </Card>
+  
+  <Card title="From Mattermost" icon="comments">
+    Full import support for all data
+  </Card>
+  
+  <Card title="From Gitter" icon="message">
+    Import scripts available
+  </Card>
+  
+  <Card title="From Others" icon="right-left">
+    Community tools and fresh start options
+  </Card>
+</CardGroup>
+
+## The Bottom Line
+
+<div className="border-l-4 border-[#5c9cfc] pl-6 my-8">
+  <h3 className="text-xl font-bold mb-4">Choose Zulip if you:</h3>
+  
+  <div className="space-y-2">
+    <div>✅ Want organized, searchable communication</div>
+    <div>✅ Have team members across time zones</div>
+    <div>✅ Value async communication</div>
+    <div>✅ Need to preserve institutional knowledge</div>
+    <div>✅ Care about open source and data ownership</div>
+    <div>✅ Run an open source project or research group</div>
+    <div>✅ Want efficient catching up on messages</div>
+    <div>✅ Need good code formatting and LaTeX support</div>
+  </div>
+</div>
+
+<div className="border-l-4 border-gray-400 pl-6 my-8">
+  <h3 className="text-xl font-bold mb-4">Choose Another Platform if:</h3>
+  
+  <div className="space-y-2">
+    <div>**Slack**: You need maximum integrations and don't mind the cost</div>
+    <div>**Teams**: You're heavily invested in Microsoft 365</div>
+    <div>**Discord**: You're running a gaming or casual social community</div>
+    <div>**Mattermost**: You want Slack-style chat you can self-host</div>
+    <div>**Element**: Decentralization and federation are priorities</div>
+  </div>
+</div>
+
+## Try Zulip
+
+The best way to understand how Zulip is different is to experience it:
+
+<Steps>
+  <Step title="Visit the dev community">
+    Go to [chat.zulip.org](https://chat.zulip.org) (no account needed) and browse some active channels. See how topics organize conversations.
+  </Step>
+  
+  <Step title="Create a test organization">
+    Sign up for a free [Zulip Cloud](https://zulip.com/new/) organization and try it with your team.
+  </Step>
+  
+  <Step title="Read about topics">
+    Learn more about [topic-based threading](/why-zulip/topic-based-threading) and why it matters.
+  </Step>
+  
+  <Step title="Get started">
+    Follow the [quick start guide](/quickstart) to learn Zulip in 5 minutes.
+  </Step>
+</Steps>
+
+<div className="bg-gradient-to-r from-[#5c9cfc]/10 to-[#747bfc]/10 rounded-lg p-6 my-8 border-l-4 border-[#5c9cfc]">
+  <h3 className="text-lg font-semibold mb-2">What Users Say</h3>
+  <p className="italic">
+    "After using Zulip, I can't go back to Slack. The topic-based organization is just so much better. I can actually find past conversations and participate asynchronously across time zones."
+  </p>
+  <p className="text-sm mt-2">— Common feedback from Zulip users</p>
+</div>
+
+## Learn More
+
+<CardGroup cols={3}>
+  <Card title="Why Topics?" icon="comments" href="/why-zulip/topic-based-threading">
+    Deep dive into topic-based threading
+  </Card>
+  
+  <Card title="All Features" icon="list" href="/features">
+    Explore everything Zulip can do
+  </Card>
+  
+  <Card title="For Open Source" icon="code-branch" href="/why-zulip/for-open-source">
+    Why open source projects choose Zulip
+  </Card>
+</CardGroup>

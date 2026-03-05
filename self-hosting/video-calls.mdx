@@ -1,0 +1,367 @@
+---
+title: Video Calls
+description: Configure video call providers for your Zulip server
+---
+
+Zulip makes it easy to [start a video call](https://zulip.com/help/start-a-call) with the click of a button. Self-hosted Zulip servers can configure their preferred video call provider.
+
+## Supported providers
+
+<CardGroup cols={2}>
+  <Card title="Jitsi Meet" icon="video">
+    **Default**
+    
+    Fully-encrypted, 100% open source video conferencing
+  </Card>
+  <Card title="Zoom" icon="video">
+    Enterprise video conferencing with scheduling
+  </Card>
+  <Card title="BigBlueButton" icon="chalkboard-user">
+    Open source web conferencing for online learning
+  </Card>
+  <Card title="Nextcloud Talk" icon="comments">
+    Privacy-focused video calls integrated with Nextcloud
+  </Card>
+</CardGroup>
+
+## Jitsi Meet (Default)
+
+By default, Zulip uses the [cloud version of Jitsi Meet](https://meet.jit.si/) at no cost.
+
+### Using self-hosted Jitsi Meet
+
+To use your own Jitsi Meet instance:
+
+1. [Install Jitsi Meet](https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-quickstart) on a server
+2. In Zulip, organization administrators can configure the Jitsi server URL:
+   - Go to **Organization settings** > **Organization settings** > **Video call provider**
+   - Select **Jitsi Meet**
+   - Enter your Jitsi server URL (e.g., `https://meet.example.com`)
+   - Click **Save changes**
+
+No server-level configuration needed!
+
+<Tip>
+Self-hosting Jitsi gives you full control over video call data and can improve performance for users on your network.
+</Tip>
+
+## Zoom
+
+Zulip supports integration with Zoom for creating meeting links. Zulip supports two types of Zoom apps:
+
+### Server-to-Server OAuth app
+
+<Note>
+**Best for most installations** - Easier to set up, but requires users to be part of your Zoom organization.
+</Note>
+
+<Steps>
+  <Step title="Create Zoom app">
+    1. Visit [Zoom Marketplace](https://marketplace.zoom.us/develop/create)
+    2. Click **Build App**
+    3. Select **Server-to-Server OAuth**
+    4. Choose an app name (e.g., "ExampleCorp Zulip")
+  </Step>
+
+  <Step title="Configure app information">
+    In the **Information** tab:
+    - Add a short description
+    - Add company name
+    - Add developer contact information
+  </Step>
+
+  <Step title="Add scopes">
+    In the **Scopes** tab, add:
+    - `meeting:write:meeting:admin`
+    - `meeting:write:meeting:master`
+  </Step>
+
+  <Step title="Activate app">
+    In the **Activation** tab:
+    - Click **Activate your app**
+    - Copy the **Account ID**, **Client ID**, and **Client Secret**
+  </Step>
+
+  <Step title="Configure Zulip server">
+    Edit `/etc/zulip/settings.py`:
+
+    ```python
+    VIDEO_ZOOM_CLIENT_ID = 'your-client-id'
+    VIDEO_ZOOM_SERVER_TO_SERVER_ACCOUNT_ID = 'your-account-id'
+    ```
+
+    Edit `/etc/zulip/zulip-secrets.conf`:
+
+    ```ini
+    video_zoom_client_secret = your-client-secret
+    ```
+  </Step>
+
+  <Step title="Restart Zulip">
+    ```bash
+    /home/zulip/deployments/current/scripts/restart-server
+    ```
+  </Step>
+
+  <Step title="Enable in organization">
+    Organization administrators can now select Zoom as the video call provider in **Organization settings**.
+  </Step>
+</Steps>
+
+<Warning>
+**User requirement:** With Server-to-Server OAuth, users must:
+- Be members of your Zoom organization
+- Use the same email address in Zulip as registered with Zoom
+</Warning>
+
+### General OAuth app
+
+<Note>
+**More flexible** - Works with any Zoom user, but requires Zoom Marketplace review process.
+</Note>
+
+<Steps>
+  <Step title="Create Zoom app">
+    1. Visit [Zoom Marketplace](https://marketplace.zoom.us/develop/create)
+    2. Click **Build App**
+    3. Select **General App**
+  </Step>
+
+  <Step title="Configure basic information">
+    In the **Basic Information** tab:
+    - Choose an app name
+    - Select **User-managed app**
+    - In **OAuth Redirect URL**, enter:
+      ```
+      https://zulip.example.com/calls/zoom/complete
+      ```
+      (Replace `zulip.example.com` with your server's hostname)
+  </Step>
+
+  <Step title="Add scopes">
+    In the **Scopes** tab, add:
+    - `meeting:write:meeting`
+  </Step>
+
+  <Step title="Submit for review">
+    Complete the **App Listing** and **Technical Design** tabs as required for [Zoom App Marketplace Review](https://developers.zoom.us/docs/distribute/app-review-process/).
+
+    Submit your app, selecting **Publish the app by myself** for an [unlisted app](https://developers.zoom.us/docs/build-flow/publishing-your-apps/#unlisted-apps).
+  </Step>
+
+  <Step title="Configure Zulip (after approval)">
+    Once approved, configure Zulip as shown above, **without** the `VIDEO_ZOOM_SERVER_TO_SERVER_ACCOUNT_ID` setting.
+  </Step>
+</Steps>
+
+### Enterprise Zoom configuration
+
+Some Zoom enterprise customers use custom domains. Configure:
+
+```python
+# /etc/zulip/settings.py
+VIDEO_ZOOM_API_URL = 'https://api.zoom.example.com'  # Custom API URL
+VIDEO_ZOOM_OAUTH_URL = 'https://zoom.example.com'   # Custom OAuth URL
+```
+
+## BigBlueButton
+
+Integrate with self-hosted [BigBlueButton](https://bigbluebutton.org/) (version 2.4+):
+
+<Steps>
+  <Step title="Get BigBlueButton credentials">
+    On your BigBlueButton server, run:
+
+    ```bash
+    bbb-conf --secret
+    ```
+
+    This displays:
+    - **URL** - API endpoint (e.g., `https://bbb.example.com/bigbluebutton/`)
+    - **Secret** - Shared secret for API authentication
+  </Step>
+
+  <Step title="Configure Zulip server">
+    Edit `/etc/zulip/settings.py`:
+
+    ```python
+    BIG_BLUE_BUTTON_URL = 'https://bbb.example.com/bigbluebutton/'
+    ```
+
+    Edit `/etc/zulip/zulip-secrets.conf`:
+
+    ```ini
+    big_blue_button_secret = your-shared-secret
+    ```
+  </Step>
+
+  <Step title="Restart Zulip">
+    ```bash
+    /home/zulip/deployments/current/scripts/restart-server
+    ```
+  </Step>
+
+  <Step title="Enable in organization">
+    Organization administrators can now select BigBlueButton as the video call provider in **Organization settings**.
+  </Step>
+</Steps>
+
+## Nextcloud Talk
+
+Integrate with [Nextcloud Talk](https://nextcloud.com/talk/) on Nextcloud 22+:
+
+1. Ensure you have access to a Nextcloud server with Talk app enabled
+2. See the [Nextcloud Talk integration guide](https://zulip.com/integrations/nextcloud-talk) for configuration
+3. Organization administrators configure the integration in Zulip's organization settings
+
+## Disable video calls
+
+To disable video and voice call buttons:
+
+1. Go to **Organization settings** > **Organization settings**
+2. Under **Video call provider**, select **None**
+3. Click **Save changes**
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Zoom - Authentication failed">
+    **Check credentials:**
+    ```bash
+    # Verify settings
+    grep VIDEO_ZOOM /etc/zulip/settings.py
+    grep video_zoom /etc/zulip/zulip-secrets.conf
+    ```
+
+    **Common issues:**
+    - Client ID or secret incorrect
+    - Account ID wrong (Server-to-Server only)
+    - App not activated in Zoom
+    - Credentials have spaces or quotes
+  </Accordion>
+
+  <Accordion title="Zoom - Users can't create meetings">
+    **For Server-to-Server OAuth:**
+    - Verify user's email in Zulip matches Zoom
+    - Confirm user is in your Zoom organization
+    - Check scopes are correct in Zoom app
+
+    **For General OAuth:**
+    - User needs to authorize the app first time
+    - Check redirect URL matches exactly
+  </Accordion>
+
+  <Accordion title="Jitsi - Calls not connecting">
+    **Check Jitsi server:**
+    ```bash
+    curl -I https://meet.example.com
+    ```
+
+    **Common issues:**
+    - SSL certificate problems
+    - Firewall blocking Jitsi ports
+    - Jitsi server not accessible from user network
+    - URL in organization settings incorrect
+  </Accordion>
+
+  <Accordion title="BigBlueButton - Cannot create rooms">
+    **Verify configuration:**
+    ```bash
+    # Test API endpoint
+    curl https://bbb.example.com/bigbluebutton/api
+    ```
+
+    **Common issues:**
+    - Wrong API URL (should end with `/bigbluebutton/`)
+    - Incorrect shared secret
+    - BigBlueButton server not accessible
+    - BBB version too old (earlier than 2.4)
+  </Accordion>
+</AccordionGroup>
+
+## Security considerations
+
+<Warning>
+**Video call privacy:** When using third-party providers like Zoom, video call content is handled by that provider according to their privacy policy and terms of service.
+</Warning>
+
+**Best practices:**
+
+<Check>Use self-hosted solutions (Jitsi, BBB) for sensitive conversations</Check>
+<Check>Review provider privacy policies and data handling</Check>
+<Check>Consider data residency requirements</Check>
+<Check>Enable waiting rooms/passwords for sensitive meetings</Check>
+<Check>Educate users about which provider is being used</Check>
+
+## Comparing providers
+
+| Feature | Jitsi Meet | Zoom | BigBlueButton | Nextcloud Talk |
+|---------|------------|------|---------------|----------------|
+| **Self-hostable** | ✅ Yes | ❌ No | ✅ Yes | ✅ Yes |
+| **Open source** | ✅ Yes | ❌ No | ✅ Yes | ✅ Yes |
+| **Cost (cloud)** | Free | Paid* | N/A | N/A |
+| **Max participants** | ~75 | 100-1000 | ~100 | ~50 |
+| **Screen sharing** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Recording** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Mobile apps** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Best for** | Privacy | Enterprise | Education | Nextcloud users |
+
+*Zoom has free tier with limitations
+
+## Advanced configurations
+
+### Multiple video call providers
+
+Organizations can only use one provider at a time, but administrators can switch providers anytime:
+
+1. Go to **Organization settings** > **Video call provider**
+2. Select new provider
+3. Configure provider-specific settings if needed
+4. Save changes
+
+### Custom Jitsi server settings
+
+For advanced Jitsi configuration, you may want to:
+
+- Enable authentication on your Jitsi server
+- Configure JWT tokens
+- Set up recording
+- Customize interface
+
+See [Jitsi Meet documentation](https://jitsi.github.io/handbook/) for details.
+
+### Load balancing video calls
+
+For high-traffic deployments:
+
+- **Jitsi**: Use [JVB clustering](https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-scalable)
+- **BigBlueButton**: Set up [scalelite](https://github.com/blindsidenetworks/scalelite)
+- **Zoom**: Enterprise plans include load balancing
+
+## Getting help
+
+For video call integration issues:
+
+- Check `/var/log/zulip/errors.log` for Zulip errors
+- Check provider-specific logs (Jitsi, BBB)
+- Visit [Zulip development community](https://zulip.com/development-community/)
+- For Jitsi: [Jitsi community](https://community.jitsi.org/)
+- For BBB: [BigBlueButton community](https://bigbluebutton.org/support/)
+- Contact [sales@zulip.com](mailto:sales@zulip.com) for enterprise support
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Settings" icon="gear" href="/self-hosting/settings">
+    Configure other server settings
+  </Card>
+  <Card title="Security" icon="shield" href="https://zulip.readthedocs.io/en/stable/production/securing-your-zulip-server.html">
+    Secure your Zulip server
+  </Card>
+  <Card title="Integrations" icon="plug" href="https://zulip.com/integrations/">
+    Explore all Zulip integrations
+  </Card>
+  <Card title="User Guide" icon="book-open" href="https://zulip.com/help/start-a-call">
+    Learn how users start calls
+  </Card>
+</CardGroup>
